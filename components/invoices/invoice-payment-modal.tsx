@@ -346,33 +346,67 @@ export function InvoicePaymentModal({
           <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/70 text-amber-900 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
               <Wallet className="w-4 h-4 text-amber-600" />
-              <span>Connect Wallet to Continue</span>
+              <span>Connect Wallet to Pay</span>
             </div>
             <p className="text-xs text-amber-700 leading-relaxed">
-              Connect your Web3 browser wallet (MetaMask, Coinbase Wallet, WalletConnect) to execute non-custodial payment settlement on Polygon.
+              Connect your Web3 wallet (MetaMask, Trust Wallet, Coinbase Wallet, or WalletConnect) to execute non-custodial payment settlement on Polygon.
             </p>
-            <Button
-              onClick={() => {
-                const connector = connectors[0]
-                if (connector) connect({ connector })
-              }}
-              disabled={isConnectingWallet}
-              variant="primary"
-              size="sm"
-              className="w-full min-h-[44px] text-xs font-semibold gap-2"
-            >
-              {isConnectingWallet ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Connecting Wallet...</span>
-                </>
-              ) : (
-                <>
-                  <Wallet className="w-3.5 h-3.5" />
-                  <span>Connect Wallet</span>
-                </>
-              )}
-            </Button>
+            <div className="space-y-2">
+              <Button
+                onClick={() => {
+                  const hasInjected = typeof window !== "undefined" && Boolean((window as any).ethereum)
+                  const injectedConnector = connectors.find((c) => c.type === "injected" || c.id === "injected")
+                  const wcConnector = connectors.find((c) => c.type === "walletConnect" || c.id === "walletConnect")
+                  const targetConnector = hasInjected ? (injectedConnector || wcConnector) : (wcConnector || injectedConnector || connectors[0])
+                  if (targetConnector) connect({ connector: targetConnector })
+                }}
+                disabled={isConnectingWallet}
+                variant="primary"
+                size="sm"
+                className="w-full min-h-[44px] text-xs font-semibold gap-2"
+              >
+                {isConnectingWallet ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Connecting Wallet...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="w-3.5 h-3.5" />
+                    <span>Connect Wallet</span>
+                  </>
+                )}
+              </Button>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const wcConnector = connectors.find((c) => c.type === "walletConnect" || c.id === "walletConnect")
+                    if (wcConnector) connect({ connector: wcConnector })
+                  }}
+                  disabled={isConnectingWallet}
+                  className="min-h-[40px] text-[11px] font-semibold gap-1.5 border-amber-300 text-amber-900 bg-amber-100/50 hover:bg-amber-100"
+                >
+                  <span>WalletConnect / Mobile</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const injectedConnector = connectors.find((c) => c.type === "injected" || c.id === "injected")
+                    if (injectedConnector) connect({ connector: injectedConnector })
+                  }}
+                  disabled={isConnectingWallet}
+                  className="min-h-[40px] text-[11px] font-semibold gap-1.5 border-amber-300 text-amber-900 bg-amber-100/50 hover:bg-amber-100"
+                >
+                  <span>Browser Wallet</span>
+                </Button>
+              </div>
+            </div>
           </div>
         ) : !isSupportedChain ? (
           /* 2. Wrong Network Switch Banner */

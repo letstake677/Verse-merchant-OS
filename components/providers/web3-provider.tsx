@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { createConfig, http, WagmiProvider } from "wagmi"
-import { injected } from "wagmi/connectors"
+import { injected, walletConnect, coinbaseWallet } from "wagmi/connectors"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import {
   SUPPORTED_CHAINS,
@@ -20,7 +20,30 @@ export const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "3a530a3734
 export const wagmiConfig = createConfig({
   chains: SUPPORTED_CHAINS,
   connectors: [
-    injected(),
+    injected({
+      target() {
+        return {
+          id: "injected",
+          name: "Injected Browser Wallet",
+          provider: typeof window !== "undefined" ? (window as any).ethereum : undefined,
+        }
+      },
+      shimDisconnect: true,
+    }),
+    walletConnect({
+      projectId,
+      showQrModal: true,
+      metadata: {
+        name: "Verse Merchant OS",
+        description: "Non-custodial crypto payment processor for modern merchants",
+        url: typeof window !== "undefined" ? window.location.origin : "https://verse-merchant-os.vercel.app",
+        icons: ["https://avatars.githubusercontent.com/u/179229932"],
+      },
+    }),
+    coinbaseWallet({
+      appName: "Verse Merchant OS",
+      appLogoUrl: "https://avatars.githubusercontent.com/u/179229932",
+    }),
   ],
   transports: {
     [polygon.id]: http(),

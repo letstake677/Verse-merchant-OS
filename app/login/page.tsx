@@ -77,7 +77,7 @@ function LoginPageContent() {
   }, [isConnected, address, router, toast])
 
   // Complete EIP-4361 (SIWE) signing and verification workflow
-  const handleSignIn = async () => {
+  const handleSignIn = async (preferredConnectorType?: "injected" | "walletConnect" | "coinbaseWallet") => {
     setErrorMsg(null)
     setAuthStep("connecting")
 
@@ -86,12 +86,44 @@ function LoginPageContent() {
 
       // 1. Connect wallet if not already connected
       if (!isConnected || !activeAddress) {
-        const connector = connectors[0] || connectors.find((c) => c.type === "injected")
-        if (!connector) {
-          throw new Error("No EVM wallet detected. Please install MetaMask, Rabby, Coinbase Wallet, or an EIP-6963 compatible wallet.")
+        const hasInjected = typeof window !== "undefined" && Boolean((window as any).ethereum)
+        
+        const injectedConnector = connectors.find((c) => c.type === "injected" || c.id === "injected")
+        const wcConnector = connectors.find((c) => c.type === "walletConnect" || c.id === "walletConnect")
+        const cbConnector = connectors.find((c) => c.type === "coinbaseWallet" || c.id === "coinbaseWalletSDK")
+
+        let targetConnector = connectors[0]
+
+        if (preferredConnectorType === "walletConnect" && wcConnector) {
+          targetConnector = wcConnector
+        } else if (preferredConnectorType === "injected" && injectedConnector) {
+          targetConnector = injectedConnector
+        } else if (preferredConnectorType === "coinbaseWallet" && cbConnector) {
+          targetConnector = cbConnector
+        } else if (hasInjected && injectedConnector) {
+          targetConnector = injectedConnector
+        } else if (wcConnector) {
+          targetConnector = wcConnector
         }
-        const connectResult = await connectAsync({ connector })
-        activeAddress = connectResult.accounts[0]
+
+        if (!targetConnector) {
+          throw new Error("No Web3 wallet connector available. Please use a Web3 browser or connect via WalletConnect.")
+        }
+
+        let connectResult
+        try {
+          connectResult = await connectAsync({ connector: targetConnector })
+        } catch (connectErr: unknown) {
+          const errText = connectErr instanceof Error ? connectErr.message : String(connectErr)
+          // If injected fails because no window.ethereum exists, automatically fall back to WalletConnect
+          if (targetConnector !== wcConnector && wcConnector && (errText.includes("Provider not found") || errText.includes("not found"))) {
+            connectResult = await connectAsync({ connector: wcConnector })
+          } else {
+            throw connectErr
+          }
+        }
+
+        activeAddress = connectResult?.accounts?.[0]
       }
 
       if (!activeAddress) {
@@ -280,7 +312,7 @@ function LoginPageContent() {
           <div className="pt-1 space-y-3">
             <button
               type="button"
-              onClick={handleSignIn}
+              onClick={() => handleSignIn()}
               disabled={isBusy}
               className="w-full flex justify-center items-center gap-2.5 py-3.5 px-4 border border-transparent rounded-xl shadow-xs text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed select-none cursor-pointer"
             >
@@ -301,6 +333,27 @@ function LoginPageContent() {
                 </>
               )}
             </button>
+
+            {!isConnected && !isBusy && (
+              <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSignIn("walletConnect")}
+                  className="w-full py-2.5 px-3 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/60 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Wallet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <span>WalletConnect / Mobile</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSignIn("injected")}
+                  className="w-full py-2.5 px-3 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/60 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Browser Extension</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Informational Section */}
