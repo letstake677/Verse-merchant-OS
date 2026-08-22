@@ -3,7 +3,8 @@
 import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/components/ui/toast"
-import { useAccount, useConnect, useDisconnect, useSignMessage } from "wagmi"
+import { useAccount, useDisconnect, useSignMessage } from "wagmi"
+import { useAppKit } from "@reown/appkit/react"
 import { 
   ShieldCheck, 
   Wallet, 
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   AlertTriangle,
   FileSignature,
+  Sparkles,
 } from "lucide-react"
 import { formatWalletAddress } from "@/lib/utils/wallet"
 import { getChainMetadata, isSupportedChain } from "@/lib/web3/chains"
@@ -26,9 +28,9 @@ function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { open } = useAppKit()
   
   const { address, isConnected, chain } = useAccount()
-  const { connectors, connectAsync } = useConnect()
   const { disconnectAsync } = useDisconnect()
   const { signMessageAsync } = useSignMessage()
 
@@ -77,54 +79,25 @@ function LoginPageContent() {
   }, [isConnected, address, router, toast])
 
   // Complete EIP-4361 (SIWE) signing and verification workflow
-  const handleSignIn = async (preferredConnectorType?: "injected" | "walletConnect" | "coinbaseWallet") => {
+  const handleSignIn = async () => {
     setErrorMsg(null)
-    setAuthStep("connecting")
+
+    // 1. If not connected, trigger Reown AppKit modal (with Email, Socials/X, all wallets)
+    if (!isConnected || !address) {
+      try {
+        setAuthStep("connecting")
+        await open()
+      } catch (err: unknown) {
+        console.error("[Auth] Reown AppKit open error:", err)
+        setErrorMsg("Unable to open wallet connection modal. Please try again.")
+      } finally {
+        setAuthStep("idle")
+      }
+      return
+    }
 
     try {
-      let activeAddress = address
-
-      // 1. Connect wallet if not already connected
-      if (!isConnected || !activeAddress) {
-        const hasInjected = typeof window !== "undefined" && Boolean((window as any).ethereum)
-        
-        const injectedConnector = connectors.find((c) => c.type === "injected" || c.id === "injected")
-        const wcConnector = connectors.find((c) => c.type === "walletConnect" || c.id === "walletConnect")
-        const cbConnector = connectors.find((c) => c.type === "coinbaseWallet" || c.id === "coinbaseWalletSDK")
-
-        let targetConnector = connectors[0]
-
-        if (preferredConnectorType === "walletConnect" && wcConnector) {
-          targetConnector = wcConnector
-        } else if (preferredConnectorType === "injected" && injectedConnector) {
-          targetConnector = injectedConnector
-        } else if (preferredConnectorType === "coinbaseWallet" && cbConnector) {
-          targetConnector = cbConnector
-        } else if (hasInjected && injectedConnector) {
-          targetConnector = injectedConnector
-        } else if (wcConnector) {
-          targetConnector = wcConnector
-        }
-
-        if (!targetConnector) {
-          throw new Error("No Web3 wallet connector available. Please use a Web3 browser or connect via WalletConnect.")
-        }
-
-        let connectResult
-        try {
-          connectResult = await connectAsync({ connector: targetConnector })
-        } catch (connectErr: unknown) {
-          const errText = connectErr instanceof Error ? connectErr.message : String(connectErr)
-          // If injected fails because no window.ethereum exists, automatically fall back to WalletConnect
-          if (targetConnector !== wcConnector && wcConnector && (errText.includes("Provider not found") || errText.includes("not found"))) {
-            connectResult = await connectAsync({ connector: wcConnector })
-          } else {
-            throw connectErr
-          }
-        }
-
-        activeAddress = connectResult?.accounts?.[0]
-      }
+      const activeAddress = address
 
       if (!activeAddress) {
         throw new Error("Unable to retrieve connected wallet address. Please unlock your wallet.")
@@ -221,7 +194,7 @@ function LoginPageContent() {
   const getButtonText = () => {
     switch (authStep) {
       case "connecting":
-        return "Connecting Wallet..."
+        return "Opening Reown AppKit..."
       case "nonce":
         return "Requesting Nonce..."
       case "signing":
@@ -229,7 +202,7 @@ function LoginPageContent() {
       case "verifying":
         return "Verifying Signature..."
       default:
-        return isConnected ? "Sign In with Connected Wallet" : "Connect Wallet & Sign In"
+        return isConnected ? "Sign In & Authorize Workspace" : "Connect with Reown AppKit"
     }
   }
 
@@ -321,38 +294,30 @@ function LoginPageContent() {
                   <RefreshCw className="h-4.5 w-4.5 shrink-0 animate-spin" />
                   <span>{getButtonText()}</span>
                 </>
+              ) : isConnected ? (
+                <>
+                  <FileSignature className="h-4.5 w-4.5 shrink-0" />
+                  <span>Authorize & Sign In</span>
+                  <ArrowRight className="h-4 w-4 shrink-0" />
+                </>
               ) : (
                 <>
-                  {isConnected ? (
-                    <FileSignature className="h-4.5 w-4.5 shrink-0" />
-                  ) : (
-                    <Wallet className="h-4.5 w-4.5 shrink-0" />
-                  )}
-                  <span>{getButtonText()}</span>
+                  <Sparkles className="h-4.5 w-4.5 shrink-0 text-indigo-200" />
+                  <span>Connect Wallet / Email / Social</span>
                   <ArrowRight className="h-4 w-4 shrink-0" />
                 </>
               )}
             </button>
 
-            {!isConnected && !isBusy && (
-              <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSignIn("walletConnect")}
-                  className="w-full py-2.5 px-3 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/60 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Wallet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span>WalletConnect / Mobile</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSignIn("injected")}
-                  className="w-full py-2.5 px-3 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/60 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Browser Extension</span>
-                </button>
-              </div>
+            {isConnected && !isBusy && (
+              <button
+                type="button"
+                onClick={() => open()}
+                className="w-full py-2.5 px-3 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/60 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Wallet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>Switch Wallet / Network in AppKit</span>
+              </button>
             )}
           </div>
 

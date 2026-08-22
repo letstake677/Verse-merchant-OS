@@ -3,12 +3,12 @@
 import * as React from "react"
 import {
   useAccount,
-  useConnect,
   useSendTransaction,
   useWriteContract,
   useSwitchChain,
   useChainId,
 } from "wagmi"
+import { useAppKit } from "@reown/appkit/react"
 import { erc20Abi, parseUnits } from "viem"
 import {
   Wallet,
@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Printer,
   FileText,
+  Sparkles,
 } from "lucide-react"
 import { Dialog } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -67,7 +68,7 @@ export function InvoicePaymentModal({
   const { toast } = useToast()
   const { address, isConnected } = useAccount()
   const currentChainId = useChainId()
-  const { connect, connectors, isPending: isConnectingWallet } = useConnect()
+  const { open } = useAppKit()
   const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
 
   const { sendTransactionAsync } = useSendTransaction()
@@ -343,70 +344,23 @@ export function InvoicePaymentModal({
       <div className="space-y-5 py-2" id="invoice-payment-modal-body">
         {/* 1. Wallet Connection Banner */}
         {!isConnected ? (
-          <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/70 text-amber-900 space-y-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
-              <Wallet className="w-4 h-4 text-amber-600" />
+          <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/60 text-slate-800 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-indigo-900">
+              <Sparkles className="w-4 h-4 text-indigo-600" />
               <span>Connect Wallet to Pay</span>
             </div>
-            <p className="text-xs text-amber-700 leading-relaxed">
-              Connect your Web3 wallet (MetaMask, Trust Wallet, Coinbase Wallet, or WalletConnect) to execute non-custodial payment settlement on Polygon.
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Connect your Web3 wallet (MetaMask, Trust Wallet, Coinbase Wallet, OKX, Phantom, Email, or Socials) via Reown AppKit to execute payment on Polygon.
             </p>
-            <div className="space-y-2">
-              <Button
-                onClick={() => {
-                  const hasInjected = typeof window !== "undefined" && Boolean((window as any).ethereum)
-                  const injectedConnector = connectors.find((c) => c.type === "injected" || c.id === "injected")
-                  const wcConnector = connectors.find((c) => c.type === "walletConnect" || c.id === "walletConnect")
-                  const targetConnector = hasInjected ? (injectedConnector || wcConnector) : (wcConnector || injectedConnector || connectors[0])
-                  if (targetConnector) connect({ connector: targetConnector })
-                }}
-                disabled={isConnectingWallet}
-                variant="primary"
-                size="sm"
-                className="w-full min-h-[44px] text-xs font-semibold gap-2"
-              >
-                {isConnectingWallet ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Connecting Wallet...</span>
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="w-3.5 h-3.5" />
-                    <span>Connect Wallet</span>
-                  </>
-                )}
-              </Button>
-
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const wcConnector = connectors.find((c) => c.type === "walletConnect" || c.id === "walletConnect")
-                    if (wcConnector) connect({ connector: wcConnector })
-                  }}
-                  disabled={isConnectingWallet}
-                  className="min-h-[40px] text-[11px] font-semibold gap-1.5 border-amber-300 text-amber-900 bg-amber-100/50 hover:bg-amber-100"
-                >
-                  <span>WalletConnect / Mobile</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const injectedConnector = connectors.find((c) => c.type === "injected" || c.id === "injected")
-                    if (injectedConnector) connect({ connector: injectedConnector })
-                  }}
-                  disabled={isConnectingWallet}
-                  className="min-h-[40px] text-[11px] font-semibold gap-1.5 border-amber-300 text-amber-900 bg-amber-100/50 hover:bg-amber-100"
-                >
-                  <span>Browser Wallet</span>
-                </Button>
-              </div>
-            </div>
+            <Button
+              onClick={() => open()}
+              variant="primary"
+              size="sm"
+              className="w-full min-h-[44px] text-xs font-semibold gap-2 bg-indigo-600 hover:bg-indigo-700"
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              <span>Open Reown AppKit (Connect Wallet)</span>
+            </Button>
           </div>
         ) : !isSupportedChain ? (
           /* 2. Wrong Network Switch Banner */
