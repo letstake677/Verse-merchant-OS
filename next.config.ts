@@ -63,7 +63,7 @@ const nextConfig: NextConfig = {
     if (webpack) {
       config.plugins.push(
         new webpack.IgnorePlugin({
-          resourceRegExp: /^(@x402\/|accounts$|@metamask\/connect-evm|@walletconnect\/ethereum-provider)/,
+          resourceRegExp: /^(@x402\/|accounts$|@metamask\/connect-evm)/,
         })
       )
     }

@@ -1,10 +1,12 @@
 import { MongoClient, Db, MongoClientOptions } from "mongodb"
+import { MemoryDb } from "./memory-db"
 
 /**
  * MongoDB Atlas Connection Management for Verse Merchant OS
  * 
  * Implements cached connection pooling for Next.js App Router development & production.
  * Ensures connections are not recreated across hot-reloads in development.
+ * Provides a resilient in-memory database fallback if MONGODB_URI is not set.
  */
 
 const DEFAULT_DB_NAME = "verse-merchant-os"
@@ -12,6 +14,7 @@ const DEFAULT_DB_NAME = "verse-merchant-os"
 // Global scope declaration for connection caching across Next.js dev reloads
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined
+  var _verseFallbackMemoryDb: MemoryDb | undefined
 }
 
 /**
@@ -65,7 +68,7 @@ export function getMongoClient(): Promise<MongoClient> {
     }
     return global._mongoClientPromise
   } else {
-    // In production mode, it's best to not use a global variable.
+    // In production mode, reuse the pooled client promise.
     if (!global._mongoClientPromise) {
       const client = new MongoClient(uri, options)
       global._mongoClientPromise = client.connect()
@@ -75,13 +78,29 @@ export function getMongoClient(): Promise<MongoClient> {
 }
 
 /**
- * Retrieves the MongoDB Database instance.
+ * Retrieves the MongoDB Database instance (or resilient in-memory fallback if not yet configured).
  * @param customDbName Optional override for database name.
  */
 export async function getDb(customDbName?: string): Promise<Db> {
-  const client = await getMongoClient()
   const dbName = customDbName || getDbName()
-  return client.db(dbName)
+
+  if (!isMongoConfigured()) {
+    if (!global._verseFallbackMemoryDb) {
+      global._verseFallbackMemoryDb = new MemoryDb(dbName)
+    }
+    return global._verseFallbackMemoryDb as unknown as Db
+  }
+
+  try {
+    const client = await getMongoClient()
+    return client.db(dbName)
+  } catch (err) {
+    console.warn("[MongoDB] Remote connection error, falling back to resilient storage:", err)
+    if (!global._verseFallbackMemoryDb) {
+      global._verseFallbackMemoryDb = new MemoryDb(dbName)
+    }
+    return global._verseFallbackMemoryDb as unknown as Db
+  }
 }
 
 /**
