@@ -2,10 +2,9 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Menu, X, ArrowRight, ShieldCheck } from "lucide-react"
+import { Menu, X, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
 
 interface MarketingNavbarProps {
   onNavigateToDashboard?: () => void

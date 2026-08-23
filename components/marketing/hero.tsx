@@ -4,12 +4,7 @@ import * as React from "react"
 import { motion } from "motion/react"
 import {
   ArrowRight,
-  ShieldCheck,
   CheckCircle2,
-  Receipt,
-  Coins,
-  CreditCard,
-  Zap,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
