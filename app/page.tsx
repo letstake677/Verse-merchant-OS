@@ -8,7 +8,6 @@ import { ProblemSection } from "@/components/marketing/problem-section"
 import { HowItWorksSection } from "@/components/marketing/how-it-works-section"
 import { FeaturesSection } from "@/components/marketing/features-section"
 import { ProductPreviewSection } from "@/components/marketing/product-preview-section"
-import { ReceiptShowcaseSection } from "@/components/marketing/receipt-showcase-section"
 import { EcosystemSection } from "@/components/marketing/ecosystem-section"
 import { FinalCtaSection } from "@/components/marketing/final-cta-section"
 import { MarketingFooter } from "@/components/marketing/footer"
@@ -68,13 +67,10 @@ export default function LandingPage() {
         {/* 6. Section 4: Product Preview */}
         <ProductPreviewSection />
 
-        {/* 7. Section 5: Beautiful Receipt Showcase (Signature) */}
-        <ReceiptShowcaseSection />
-
-        {/* 8. Section 6: Verse Ecosystem & Trust */}
+        {/* 7. Section 5: Verse Ecosystem & Trust */}
         <EcosystemSection />
 
-        {/* 9. Section 7: Final Call to Action */}
+        {/* 8. Section 6: Final Call to Action */}
         <FinalCtaSection
           onGetStarted={handleGetStarted}
           onExploreProduct={handleExploreProduct}

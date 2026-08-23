@@ -172,7 +172,7 @@ export function ProductPreviewSection() {
                     </p>
                   </div>
                   <Badge variant="verse" className="self-start sm:self-auto text-xs py-0.5 px-2.5">
-                    Demo Mode
+                    Live Settlement
                   </Badge>
                 </div>
 
