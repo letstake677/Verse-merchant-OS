@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Menu, X, ArrowRight, ShieldCheck, Sparkles } from "lucide-react"
+import { Menu, X, ArrowRight, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -55,13 +55,6 @@ export function MarketingNavbar({ onNavigateToDashboard }: MarketingNavbarProps)
               {link.label}
             </a>
           ))}
-          <Link
-            href="/design-system"
-            className="text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
-          >
-            <Sparkles className="w-3 h-3" />
-            <span>Design System</span>
-          </Link>
         </nav>
 
         {/* Right: Actions */}
@@ -120,14 +113,6 @@ export function MarketingNavbar({ onNavigateToDashboard }: MarketingNavbarProps)
                 {link.label}
               </a>
             ))}
-            <Link
-              href="/design-system"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-indigo-600 hover:bg-indigo-50"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Design System Specs</span>
-            </Link>
           </nav>
 
           <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">

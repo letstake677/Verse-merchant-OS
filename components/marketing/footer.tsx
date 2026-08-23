@@ -120,10 +120,6 @@ export function MarketingFooter() {
             <Link href="/dashboard" className="hover:text-slate-600 transition-colors">
               Merchant Workspace
             </Link>
-            <span>•</span>
-            <Link href="/design-system" className="hover:text-slate-600 transition-colors">
-              Design System Specs
-            </Link>
           </div>
         </div>
       </div>
