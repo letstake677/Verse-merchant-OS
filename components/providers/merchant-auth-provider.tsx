@@ -51,7 +51,7 @@ export function MerchantAuthProvider({ children }: { children: React.ReactNode }
         setMerchant(null)
         setAuthenticatedWallet(null)
         if (isProtectedPath) {
-          router.replace("/login?expired=true")
+          router.replace("/login")
         }
         return
       }

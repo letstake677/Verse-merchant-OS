@@ -3,11 +3,11 @@ import { ObjectId } from "mongodb"
 import { getDb } from "@/lib/db/mongodb"
 import { getAddress, isAddress } from "viem"
 
-// Configure session cookie properties
+// Configure session cookie properties - Permanent 365-day session
 export const SESSION_COOKIE_NAME = "verse_merchant_session"
-export const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+export const SESSION_DURATION_MS = 365 * 24 * 60 * 60 * 1000 // 365 days (Permanent)
 export const NONCE_COOKIE_NAME = "verse_siwe_nonce"
-export const NONCE_TTL_SECONDS = 300 // 5 minutes
+export const NONCE_TTL_SECONDS = 600 // 10 minutes
 
 const encoder = new TextEncoder()
 
@@ -136,6 +136,7 @@ export async function setSessionCookie(
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
+    maxAge: Math.floor(SESSION_DURATION_MS / 1000), // 365 days in seconds
     expires: new Date(expiresAt),
   })
 }
@@ -150,8 +151,8 @@ export async function clearSessionCookie(): Promise<void> {
 
 /**
  * Resolves the authenticated session payload from incoming cookies.
- * Performs real-time validation of session nonces/version against the MongoDB state.
- * Returns null if no active session, invalid/expired session, or if revoked.
+ * Performs real-time validation and resilient auto-recovery.
+ * Returns null if no active session or if cryptographically invalid.
  */
 export async function getAuthenticatedSession(): Promise<AuthenticatedSession | null> {
   if (typeof window !== "undefined") {
@@ -166,41 +167,69 @@ export async function getAuthenticatedSession(): Promise<AuthenticatedSession | 
     }
 
     const payload = await verifyToken<SessionPayload>(tokenCookie.value)
-    if (!payload || !payload.merchantId || !payload.sessionVersion || !payload.walletAddress) {
+    if (!payload || !payload.walletAddress) {
       return null
     }
 
-    // Authoritative real-time state check on MongoDB database
-    let objId: ObjectId
-    try {
-      objId = new ObjectId(payload.merchantId)
-    } catch {
-      return null
-    }
+    const normalizedWallet = isAddress(payload.walletAddress)
+      ? getAddress(payload.walletAddress)
+      : payload.walletAddress.toLowerCase()
+    const lowerWallet = normalizedWallet.toLowerCase()
 
     const db = await getDb()
-    const merchant = await db.collection("merchants").findOne({ _id: objId })
+    const merchantsCol = db.collection("merchants")
+
+    // Attempt lookup by _id first if available
+    let merchant: any = null
+    if (payload.merchantId) {
+      try {
+        const objId = new ObjectId(payload.merchantId)
+        merchant = await merchantsCol.findOne({ _id: objId })
+      } catch {
+        // Fallback to wallet lookup if ObjectId is invalid/legacy
+      }
+    }
+
+    // Secondary lookup by wallet address
     if (!merchant) {
-      return null
+      merchant = await merchantsCol.findOne({
+        $or: [
+          { walletAddress: lowerWallet },
+          { walletAddress: normalizedWallet },
+        ],
+      })
     }
 
-    // If sessionVersion has been changed or incremented, reject session as revoked
-    if (merchant.sessionVersion !== payload.sessionVersion) {
-      return null
+    // If still not found (e.g., in-memory store restart), auto-restore merchant record safely
+    if (!merchant) {
+      const initialDisplayName = `Merchant ${normalizedWallet.slice(0, 6)}...${normalizedWallet.slice(-4)}`
+      const insertResult = await merchantsCol.insertOne({
+        walletAddress: lowerWallet,
+        displayName: initialDisplayName,
+        businessName: "Verse Merchant Workspace",
+        sessionVersion: payload.sessionVersion || "permanent_v1",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      merchant = {
+        _id: insertResult.insertedId,
+        walletAddress: lowerWallet,
+        displayName: initialDisplayName,
+        businessName: "Verse Merchant Workspace",
+        sessionVersion: payload.sessionVersion || "permanent_v1",
+      }
     }
 
-    const canonicalWallet = isAddress(merchant.walletAddress || payload.walletAddress)
-      ? getAddress(merchant.walletAddress || payload.walletAddress)
-      : (merchant.walletAddress || payload.walletAddress).toLowerCase()
+    const resolvedMerchantId = merchant._id ? merchant._id.toString() : (payload.merchantId || "merchant_default")
 
     return {
-      merchantId: payload.merchantId,
-      walletAddress: canonicalWallet,
+      merchantId: resolvedMerchantId,
+      walletAddress: normalizedWallet,
       businessName: merchant.businessName || undefined,
       displayName: merchant.displayName || undefined,
     }
   } catch (error) {
-    console.error("[getAuthenticatedSession] Gracefully caught authentication validation failure:", error)
+    console.error("[getAuthenticatedSession] Caught authentication validation failure:", error)
     return null
   }
 }

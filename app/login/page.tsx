@@ -228,19 +228,6 @@ function LoginPageContent() {
         <div className="bg-white py-10 px-6 shadow-xs border border-slate-200/80 rounded-2xl sm:px-10 space-y-6">
           
           {/* Active alerts or feedback */}
-          {isExpired && !errorMsg && (
-            <div 
-              role="alert" 
-              className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl text-amber-900 text-xs font-medium leading-relaxed flex items-start gap-2.5 animate-in fade-in"
-            >
-              <Activity className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">Session Expired</p>
-                <p className="text-amber-800 text-[11px] mt-0.5">Please sign a fresh SIWE message with your wallet to continue.</p>
-              </div>
-            </div>
-          )}
-
           {errorMsg && (
             <div 
               role="alert" 
