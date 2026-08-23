@@ -58,6 +58,11 @@ export function InvoiceTable({
 }: InvoiceTableProps) {
   // Error state
   if (error) {
+    const isAuthError =
+      error.toLowerCase().includes("auth") ||
+      error.toLowerCase().includes("unauthorized") ||
+      error.toLowerCase().includes("session")
+
     return (
       <Card className={className} id="invoices-error-card">
         <CardContent className="p-8 sm:p-12 flex flex-col items-center justify-center text-center">
@@ -65,23 +70,40 @@ export function InvoiceTable({
             <AlertCircle className="w-6 h-6" />
           </div>
           <h3 className="text-base font-bold text-slate-900 mb-1">
-            Unable to load invoices
+            {isAuthError ? "Sign In Required to View Invoices" : "Unable to load invoices"}
           </h3>
           <p className="text-xs text-slate-500 max-w-md mb-6 leading-relaxed">
-            {error}
+            {isAuthError
+              ? "Please authenticate with your Web3 wallet to access and manage your invoices."
+              : error}
           </p>
-          {onRetry && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={onRetry}
-              className="gap-2 text-xs font-semibold h-9 px-4 text-slate-700"
-              id="retry-fetch-invoices-button"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry</span>
-            </Button>
-          )}
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            {isAuthError ? (
+              <Link href="/login">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="text-xs font-medium h-9 px-5"
+                  id="go-to-login-button"
+                >
+                  <span>Sign In with Wallet</span>
+                </Button>
+              </Link>
+            ) : (
+              onRetry && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onRetry}
+                  className="gap-2 text-xs font-semibold h-9 px-4 text-slate-700"
+                  id="retry-fetch-invoices-button"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry</span>
+                </Button>
+              )
+            )}
+          </div>
         </CardContent>
       </Card>
     )

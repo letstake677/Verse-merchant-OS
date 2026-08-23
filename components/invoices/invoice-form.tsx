@@ -93,12 +93,19 @@ export function InvoiceForm({
     value: string | number
   ) => {
     const updatedItems = [...formData.items]
-    const item = { ...updatedItems[index], [field]: value }
+    let sanitizedValue: string | number = value
+
+    if (field === "unitPrice" && typeof value === "string") {
+      // Clean leading currency symbol or accidental formatting commas/dollar signs
+      sanitizedValue = value.replace(/[$€£,\s]/g, "")
+    }
+
+    const item = { ...updatedItems[index], [field]: sanitizedValue }
 
     // Safely recalculate line amount using deterministic integer cents math
     item.amount = calculateLineItemAmount(
-      field === "quantity" ? value : item.quantity,
-      field === "unitPrice" ? value : item.unitPrice
+      field === "quantity" ? sanitizedValue : item.quantity,
+      field === "unitPrice" ? sanitizedValue : item.unitPrice
     )
 
     updatedItems[index] = item
@@ -351,9 +358,10 @@ export function InvoiceForm({
                         onChange={(e) =>
                           handleUpdateItem(index, "quantity", e.target.value)
                         }
+                        onFocus={(e) => e.target.select()}
                         error={!!itemError?.quantity}
                         helperText={itemError?.quantity}
-                        className="h-8 text-xs bg-white text-center"
+                        className="h-8 text-xs bg-white text-center font-tabular"
                         aria-required="true"
                         aria-invalid={!!itemError?.quantity}
                       />
@@ -369,14 +377,14 @@ export function InvoiceForm({
                       </label>
                       <Input
                         id={`item-price-${index}`}
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="0.00"
                         value={item.unitPrice}
                         onChange={(e) =>
                           handleUpdateItem(index, "unitPrice", e.target.value)
                         }
+                        onFocus={(e) => e.target.select()}
                         error={!!itemError?.unitPrice}
                         helperText={itemError?.unitPrice}
                         className="h-8 text-xs bg-white text-right font-tabular"
