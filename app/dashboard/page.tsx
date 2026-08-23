@@ -11,13 +11,11 @@ import {
   CreditCard,
   Search,
   ExternalLink,
-  Sparkles,
   ShieldCheck,
   CheckCircle2,
   Clock,
   QrCode,
   ArrowUpRight,
-  ArrowLeft,
   XCircle,
   BarChart3,
   Receipt,
@@ -149,46 +147,7 @@ function MerchantDashboardPageContent() {
       onSelectSection={setCurrentSection}
       currentSectionTitle={getSectionTitle()}
     >
-      {/* 1. Environment Preview Banner */}
-      <div
-        id="workspace-preview-banner"
-        className="p-3 sm:p-4 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-slate-800 text-indigo-400 flex items-center justify-center shrink-0 border border-slate-700">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <span className="font-semibold text-white">
-              Verse Merchant OS Workspace
-            </span>
-            <span className="text-slate-400 sm:ml-2 text-[11px] block sm:inline">
-              Polygon settlement layer active • Ready for payments
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Link href="/">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-7 text-xs gap-1.5 bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              <span>Back to Landing Page</span>
-            </Button>
-          </Link>
-          <Link href="/design-system">
-            <Button variant="verse" size="sm" className="h-7 text-xs gap-1.5">
-              <span>Design System</span>
-              <ExternalLink className="w-3 h-3" />
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* 2. Current Business / Workspace Identity Area */}
+      {/* Current Business / Workspace Identity Area */}
       <MerchantIdentity />
 
       {/* 3. Section Routing */}

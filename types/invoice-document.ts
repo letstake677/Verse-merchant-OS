@@ -115,35 +115,61 @@ export interface InvoiceSummaryMetrics {
 
 /**
  * Transforms a MongoDB InvoiceDocument into an application-level Invoice contract.
- * - Converts `_id` ObjectId to string `id`
- * - Formats Date instances to ISO date/timestamp strings
+ * - Converts `_id` ObjectId or string to string `id`
+ * - Formats Date instances or ISO strings safely
  */
 export function serializeInvoiceDocument(doc: InvoiceDocument): Invoice {
+  const resolvedId = doc._id
+    ? typeof doc._id === "string"
+      ? doc._id
+      : typeof (doc._id as any).toHexString === "function"
+      ? (doc._id as any).toHexString()
+      : (doc._id as any).toString()
+    : ""
+
+  const safeItems = Array.isArray(doc.items)
+    ? doc.items.map((item) => ({
+        id: item?.id || "",
+        description: item?.description || "",
+        quantity: item?.quantity || 1,
+        unitPrice: item?.unitPrice || "0.00",
+        amount: item?.amount || "0.00",
+      }))
+    : []
+
+  const formatSafeDate = (d: any): string | undefined => {
+    if (!d) return undefined
+    if (d instanceof Date) {
+      return !isNaN(d.getTime()) ? d.toISOString() : undefined
+    }
+    if (typeof d === "string") return d
+    return undefined
+  }
+
+  const formatDueDate = (d: any): string | undefined => {
+    const iso = formatSafeDate(d)
+    return iso ? iso.split("T")[0] : undefined
+  }
+
   return {
-    id: doc._id.toHexString(),
-    merchantId: doc.merchantId,
+    id: resolvedId,
+    merchantId: doc.merchantId || "",
     customerId: doc.customerId,
     customerName: doc.customerName,
     customerEmail: doc.customerEmail,
-    invoiceNumber: doc.invoiceNumber,
-    status: doc.status,
-    currency: doc.currency,
-    items: doc.items.map((item) => ({
-      id: item.id,
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      amount: item.amount,
-    })),
-    subtotal: doc.subtotal,
+    invoiceNumber: doc.invoiceNumber || "",
+    status: doc.status || "draft",
+    currency: doc.currency || "USD",
+    items: safeItems,
+    subtotal: doc.subtotal || "0.00",
     taxRate: doc.taxRate,
     taxAmount: doc.taxAmount,
-    total: doc.total,
+    total: doc.total || "0.00",
     notes: doc.notes,
-    dueDate: doc.dueDate ? doc.dueDate.toISOString().split("T")[0] : undefined,
-    createdAt: doc.createdAt ? doc.createdAt.toISOString() : new Date().toISOString(),
-    updatedAt: doc.updatedAt ? doc.updatedAt.toISOString() : undefined,
-    paidAt: doc.paidAt ? doc.paidAt.toISOString() : undefined,
+    dueDate: formatDueDate(doc.dueDate),
+    createdAt: formatSafeDate(doc.createdAt) || new Date().toISOString(),
+    updatedAt: formatSafeDate(doc.updatedAt),
+    paidAt: formatSafeDate(doc.paidAt),
     paymentId: doc.paymentId,
   }
 }

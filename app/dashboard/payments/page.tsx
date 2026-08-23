@@ -3,8 +3,6 @@
 export const dynamic = "force-dynamic"
 
 import * as React from "react"
-import Link from "next/link"
-import { Sparkles, ArrowLeft, ExternalLink, RefreshCw } from "lucide-react"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { PaymentsHeader } from "@/components/payments/payments-header"
 import { PaymentSummary } from "@/components/payments/payment-summary"
@@ -13,7 +11,6 @@ import { PaymentsTable } from "@/components/payments/payments-table"
 import { PaymentDetailModal } from "@/components/payments/payment-detail-modal"
 import { Payment, PaymentFiltersState, PaymentSummaryMetrics } from "@/types/payment"
 import { useToast } from "@/components/ui/toast"
-import { Button } from "@/components/ui/button"
 
 export default function PaymentsPage() {
   const { toast } = useToast()
@@ -112,49 +109,7 @@ export default function PaymentsPage() {
       onSelectSection={() => {}}
       currentSectionTitle="Payments"
     >
-      {/* 1. Environment Preview Banner */}
-      <div
-        id="payments-workspace-banner"
-        className="p-3 sm:p-4 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-slate-800 text-indigo-400 flex items-center justify-center shrink-0 border border-slate-700">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <span className="font-semibold text-white">
-              Payments & Settlement Workspace
-            </span>
-            <span className="text-slate-400 sm:ml-2 text-[11px] block sm:inline">
-              Authoritative Polygon Web3 payment ledger and on-chain settlement verifier.
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleRefresh}
-            className="h-7 text-xs gap-1.5 bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white"
-          >
-            <RefreshCw className="w-3 h-3" />
-            <span>Refresh Ledger</span>
-          </Button>
-          <Link href="/dashboard">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-7 text-xs gap-1.5 bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              <span>Overview</span>
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* 2. Payments Header */}
+      {/* Payments Header */}
       <PaymentsHeader onCreatePayment={handleCreatePayment} />
 
       {/* 3. Summary Cards */}

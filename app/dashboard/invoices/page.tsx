@@ -1,8 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { Sparkles, ArrowLeft, ExternalLink } from "lucide-react"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { InvoiceHeader } from "@/components/invoices/invoice-header"
 import { InvoiceSummary } from "@/components/invoices/invoice-summary"
@@ -11,7 +9,6 @@ import { InvoiceTable } from "@/components/invoices/invoice-table"
 import { Invoice, InvoiceFiltersState } from "@/types/invoice"
 import { InvoiceSummaryMetrics } from "@/types/invoice-document"
 import { useToast } from "@/components/ui/toast"
-import { Button } from "@/components/ui/button"
 
 export default function InvoicesPage() {
   const { toast } = useToast()
@@ -148,46 +145,7 @@ export default function InvoicesPage() {
       onSelectSection={() => {}}
       currentSectionTitle="Invoices"
     >
-      {/* 1. Environment Preview Banner */}
-      <div
-        id="invoices-workspace-banner"
-        className="p-3 sm:p-4 rounded-xl bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-slate-800 text-indigo-400 flex items-center justify-center shrink-0 border border-slate-700">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <div>
-            <span className="font-semibold text-white">
-              Invoice Workspace
-            </span>
-            <span className="text-slate-400 sm:ml-2 text-[11px] block sm:inline">
-              Generate itemized billing requests, track payment status, and issue client receipts.
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <Link href="/dashboard">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-7 text-xs gap-1.5 bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              <span>Workspace Overview</span>
-            </Button>
-          </Link>
-          <Link href="/design-system">
-            <Button variant="verse" size="sm" className="h-7 text-xs gap-1.5">
-              <span>Design System</span>
-              <ExternalLink className="w-3 h-3" />
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {/* 2. Invoices Header */}
+      {/* Invoices Header */}
       <InvoiceHeader />
 
       {/* 3. Summary Cards (Calculated deterministically from real MongoDB data) */}
