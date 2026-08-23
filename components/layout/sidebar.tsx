@@ -10,7 +10,6 @@ import {
   BarChart3,
   Settings,
   ShieldCheck,
-  ExternalLink,
   LogOut,
   Wallet,
 } from "lucide-react"
@@ -184,18 +183,6 @@ export function Sidebar({
             </Link>
           )
         })}
-
-        {/* Developer Sandbox Link */}
-        <Link
-          href="/design-system"
-          className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-indigo-500" />
-            <span>Design System</span>
-          </div>
-          <ExternalLink className="w-3 h-3 text-slate-400" />
-        </Link>
       </div>
 
       {/* Merchant Profile Footer */}

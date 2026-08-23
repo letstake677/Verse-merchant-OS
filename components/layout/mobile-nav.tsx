@@ -186,20 +186,8 @@ export function MobileNav({
             })}
           </div>
 
-          {/* Quick link to design system demo */}
+          {/* Session logout */}
           <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
-            <Link
-              href="/design-system"
-              onClick={() => setIsDrawerOpen(false)}
-              className="flex items-center justify-between p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 hover:bg-indigo-100 transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-semibold">View Design System Showcase</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-indigo-400" />
-            </Link>
-
             <button
               type="button"
               onClick={handleLogout}
