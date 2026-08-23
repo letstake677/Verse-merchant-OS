@@ -165,6 +165,45 @@ function applyUpdate(doc: any, update: any): any {
   return updated
 }
 
+function applyProjection(doc: any, projection: Record<string, any>): any {
+  if (!projection || Object.keys(projection).length === 0) return doc
+
+  const keys = Object.keys(projection)
+  const isExclusive = keys.every((k) => k === "_id" || projection[k] === 0 || projection[k] === false)
+
+  if (isExclusive) {
+    const res = { ...doc }
+    for (const k of keys) {
+      if (projection[k] === 0 || projection[k] === false) {
+        delete res[k]
+      }
+    }
+    return res
+  } else {
+    // Inclusive projection
+    const res: any = {}
+    // _id is included by default unless explicitly excluded with _id: 0
+    if (projection._id !== 0 && projection._id !== false && doc._id !== undefined) {
+      res._id = doc._id
+    }
+    for (const k of keys) {
+      if (k === "_id") {
+        if (projection._id === 1 || projection._id === true) {
+          res._id = doc._id
+        }
+        continue
+      }
+      if (projection[k] === 1 || projection[k] === true) {
+        const val = getNestedValue(doc, k)
+        if (val !== undefined) {
+          setNestedValue(res, k, val)
+        }
+      }
+    }
+    return res
+  }
+}
+
 export class MemoryCollection<T = any> {
   private collectionName: string
 
@@ -176,17 +215,21 @@ export class MemoryCollection<T = any> {
     return getStore(this.collectionName)
   }
 
-  async findOne(filter: any = {}): Promise<T | null> {
+  async findOne(filter: any = {}, options: any = {}): Promise<T | null> {
     const store = this.getStore()
     for (const doc of store.values()) {
       if (matchesFilter(doc, filter)) {
-        return JSON.parse(JSON.stringify(doc))
+        const cloned = JSON.parse(JSON.stringify(doc))
+        if (options && options.projection) {
+          return applyProjection(cloned, options.projection)
+        }
+        return cloned
       }
     }
     return null
   }
 
-  find(filter: any = {}) {
+  find(filter: any = {}, options: any = {}) {
     const store = this.getStore()
     const matchingDocs: any[] = []
 
@@ -197,10 +240,28 @@ export class MemoryCollection<T = any> {
     }
 
     let sortFn: ((a: any, b: any) => number) | null = null
-    let skipCount = 0
-    let limitCount = Infinity
+    let skipCount = options?.skip || 0
+    let limitCount = options?.limit || Infinity
+    let projectionSpec: Record<string, any> | null = options?.projection || null
+
+    if (options?.sort) {
+      const entries = Object.entries(options.sort as Record<string, number>)
+      sortFn = (a, b) => {
+        for (const [key, dir] of entries) {
+          const valA = getNestedValue(a, key)
+          const valB = getNestedValue(b, key)
+          if (valA < valB) return dir === -1 ? 1 : -1
+          if (valA > valB) return dir === -1 ? -1 : 1
+        }
+        return 0
+      }
+    }
 
     const cursor = {
+      project: (proj: Record<string, any>) => {
+        projectionSpec = proj
+        return cursor
+      },
       sort: (sortSpec: Record<string, number>) => {
         const entries = Object.entries(sortSpec)
         sortFn = (a, b) => {
@@ -222,6 +283,12 @@ export class MemoryCollection<T = any> {
         limitCount = count || Infinity
         return cursor
       },
+      count: async (): Promise<number> => {
+        return matchingDocs.length
+      },
+      countDocuments: async (): Promise<number> => {
+        return matchingDocs.length
+      },
       toArray: async (): Promise<T[]> => {
         let results = [...matchingDocs]
         if (sortFn) {
@@ -232,6 +299,9 @@ export class MemoryCollection<T = any> {
         }
         if (limitCount < Infinity) {
           results = results.slice(0, limitCount)
+        }
+        if (projectionSpec) {
+          results = results.map((doc) => applyProjection(doc, projectionSpec!))
         }
         return results
       },
