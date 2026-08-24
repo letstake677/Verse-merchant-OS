@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Printer, Copy, Check, Share2, Edit3, XCircle, Wallet } from "lucide-react"
+import { Printer, Copy, Check, Share2, Edit3, XCircle, Wallet, QrCode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/toast"
 import { InvoiceStatus } from "@/types/invoice"
@@ -13,6 +13,7 @@ interface InvoiceDetailActionsProps {
   isEditable?: boolean
   onCancelInvoice?: () => void
   onPayInvoice?: () => void
+  onShowQR?: () => void
 }
 
 function subscribe() {
@@ -34,6 +35,7 @@ export function InvoiceDetailActions({
   isEditable = true,
   onCancelInvoice,
   onPayInvoice,
+  onShowQR,
 }: InvoiceDetailActionsProps) {
   const { toast } = useToast()
   const [hasCopied, setHasCopied] = React.useState(false)
@@ -130,6 +132,22 @@ export function InvoiceDetailActions({
         >
           <Wallet className="w-3.5 h-3.5" />
           <span>Pay Invoice</span>
+        </Button>
+      )}
+
+      {/* 0.05. Show QR Code Payment Modal (for eligible invoices) */}
+      {onShowQR && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onShowQR}
+          className="h-8 sm:h-9 px-3 text-xs font-semibold gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50 hover:text-purple-800"
+          title="Show scannable QR payment code for customer"
+          aria-label="Show QR payment code"
+          id="show-qr-invoice-button"
+        >
+          <QrCode className="w-3.5 h-3.5 text-purple-600" />
+          <span>Show QR</span>
         </Button>
       )}
 

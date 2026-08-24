@@ -14,6 +14,7 @@ interface InvoiceDetailHeaderProps {
   onEdit?: () => void
   onCancelInvoice?: () => void
   onPayInvoice?: () => void
+  onShowQR?: () => void
 }
 
 export function InvoiceDetailHeader({
@@ -22,6 +23,7 @@ export function InvoiceDetailHeader({
   onEdit,
   onCancelInvoice,
   onPayInvoice,
+  onShowQR,
 }: InvoiceDetailHeaderProps) {
   const isEditable = status !== "paid" && status !== "cancelled"
 
@@ -61,7 +63,7 @@ export function InvoiceDetailHeader({
           </p>
         </div>
 
-        {/* Read-only & Edit UX Actions (Pay, Edit, Copy Link, Share, Print) */}
+        {/* Read-only & Edit UX Actions (Pay, Show QR, Edit, Copy Link, Share, Print) */}
         <InvoiceDetailActions
           invoiceNumber={invoiceNumber}
           status={status}
@@ -69,6 +71,7 @@ export function InvoiceDetailHeader({
           isEditable={isEditable}
           onCancelInvoice={onCancelInvoice}
           onPayInvoice={onPayInvoice}
+          onShowQR={onShowQR}
         />
       </div>
     </div>

@@ -16,6 +16,7 @@ import { InvoiceDetailItems } from "@/components/invoices/invoice-detail-items"
 import { InvoiceDetailNotes } from "@/components/invoices/invoice-detail-notes"
 import { InvoicePaymentModal } from "@/components/invoices/invoice-payment-modal"
 import { PaymentPreparationModal } from "@/components/payments/payment-preparation-modal"
+import { PaymentQRModal } from "@/components/payments/payment-qr-modal"
 import { InvoiceForm } from "@/components/invoices/invoice-form"
 
 import { InvoicePreview } from "@/components/invoices/invoice-preview"
@@ -73,6 +74,7 @@ export function InvoiceDetail({ invoice, onInvoiceUpdated }: InvoiceDetailProps)
   const [isCancelling, setIsCancelling] = React.useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState(false)
   const [isPaymentPrepModalOpen, setIsPaymentPrepModalOpen] = React.useState(false)
+  const [isQRModalOpen, setIsQRModalOpen] = React.useState(false)
 
 
   const handleCancelInvoiceConfirm = async () => {
@@ -409,6 +411,7 @@ export function InvoiceDetail({ invoice, onInvoiceUpdated }: InvoiceDetailProps)
           onEdit={handleStartEdit}
           onCancelInvoice={() => setIsCancelDialogOpen(true)}
           onPayInvoice={() => setIsPaymentModalOpen(true)}
+          onShowQR={() => setIsQRModalOpen(true)}
         />
 
 
@@ -471,6 +474,13 @@ export function InvoiceDetail({ invoice, onInvoiceUpdated }: InvoiceDetailProps)
         <PaymentPreparationModal
           isOpen={isPaymentPrepModalOpen}
           onClose={() => setIsPaymentPrepModalOpen(false)}
+          invoice={invoice}
+        />
+
+        {/* Payment QR Modal (Phase 8.2 QR-Based Wallet-Independent Checkout) */}
+        <PaymentQRModal
+          isOpen={isQRModalOpen}
+          onClose={() => setIsQRModalOpen(false)}
           invoice={invoice}
         />
 
