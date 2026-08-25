@@ -18,11 +18,37 @@ declare global {
 }
 
 /**
- * Returns whether MONGODB_URI is defined in the environment.
+ * Sanitizes and extracts the raw MongoDB connection URI.
+ * Handles common copy-paste issues like quotes, whitespace, or accidental "MONGODB_URI=" prefix.
+ */
+export function getSanitizedMongoUri(): string | null {
+  let uri = process.env.MONGODB_URI?.trim()
+  if (!uri) return null
+
+  // Remove accidental quotes wrapping the URI (e.g. "mongodb+srv://..." or 'mongodb+srv://...')
+  if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
+    uri = uri.slice(1, -1).trim()
+  }
+
+  // Remove accidental "MONGODB_URI=" prefix if pasted into the value field
+  if (uri.startsWith("MONGODB_URI=")) {
+    uri = uri.replace(/^MONGODB_URI=\s*/, "").trim()
+  }
+
+  // Remove wrapping quotes again if present after key stripping
+  if ((uri.startsWith('"') && uri.endsWith('"')) || (uri.startsWith("'") && uri.endsWith("'"))) {
+    uri = uri.slice(1, -1).trim()
+  }
+
+  return uri.length > 0 ? uri : null
+}
+
+/**
+ * Returns whether MONGODB_URI is defined and valid in the environment.
  */
 export function isMongoConfigured(): boolean {
-  const uri = process.env.MONGODB_URI
-  return Boolean(uri && uri.trim().length > 0)
+  const uri = getSanitizedMongoUri()
+  return Boolean(uri && (uri.startsWith("mongodb://") || uri.startsWith("mongodb+srv://")))
 }
 
 /**
@@ -43,8 +69,8 @@ export function getMongoClient(): Promise<MongoClient> {
     )
   }
 
-  const uri = process.env.MONGODB_URI
-  if (!uri || !uri.trim()) {
+  const uri = getSanitizedMongoUri()
+  if (!uri) {
     return Promise.reject(
       new Error(
         "Database Configuration Error: MONGODB_URI is not set. Please define MONGODB_URI in your environment variables."

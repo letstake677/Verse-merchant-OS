@@ -69,7 +69,7 @@ export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
       decimals: 18,
       address:
         process.env.VERSE_POLYGON_CONTRACT_ADDRESS?.trim() ||
-        "0xc35DADB65012eC5796536bD9864eD8773aBc74C4",
+        "0xc708d6f2153933daa50b2d0758955be0a93a8fec",
       chainId: POLYGON_MAINNET_CHAIN_ID,
     },
   ],
