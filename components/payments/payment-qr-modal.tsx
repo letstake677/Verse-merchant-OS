@@ -14,7 +14,7 @@ import {
   Coins,
   Wallet,
   Sparkles,
-  Info,
+  ArrowUpRight,
 } from "lucide-react"
 import { Dialog } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -51,13 +51,21 @@ export function PaymentQRModal({
 }: PaymentQRModalProps) {
   const { toast } = useToast()
 
+  // Default to Polygon Mainnet (137) and USDC
   const [selectedChainId, setSelectedChainId] = React.useState<number>(POLYGON_MAINNET_CHAIN_ID)
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
   const [qrSvg, setQrSvg] = React.useState<string>("")
   const [qrDataUrl, setQrDataUrl] = React.useState<string>("")
   const [copiedLink, setCopiedLink] = React.useState<boolean>(false)
   const [copiedAddress, setCopiedAddress] = React.useState<boolean>(false)
-  const [isPrintSlipOpen, setIsPrintSlipOpen] = React.useState<boolean>(false)
+
+  // Reset to USDC on open
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedChainId(POLYGON_MAINNET_CHAIN_ID)
+      setSelectedSymbol("USDC")
+    }
+  }, [isOpen])
 
   // Construct canonical payment URL
   const paymentUrl = React.useMemo(() => {
@@ -67,7 +75,7 @@ export function PaymentQRModal({
     return `/pay/${invoice.id}`
   }, [invoice.id])
 
-  // Supported tokens for active chain
+  // Supported tokens for active chain (USDC prioritized)
   const availableTokens: PaymentToken[] = React.useMemo(() => {
     return (
       SUPPORTED_PAYMENT_TOKENS[selectedChainId] ||
@@ -83,14 +91,14 @@ export function PaymentQRModal({
     QRCode.toString(paymentUrl, {
       type: "svg",
       margin: 1,
-      width: 260,
+      width: 240,
       color: {
         dark: "#0f172a",
         light: "#ffffff",
       },
     })
       .then((svg) => setQrSvg(svg))
-      .catch((err) => console.error("[PaymentQRModal] SVG gen error:", err))
+      .catch((err) => console.error("[PaymentQRModal] SVG generation error:", err))
 
     QRCode.toDataURL(paymentUrl, {
       margin: 1,
@@ -101,7 +109,7 @@ export function PaymentQRModal({
       },
     })
       .then((dataUrl) => setQrDataUrl(dataUrl))
-      .catch((err) => console.error("[PaymentQRModal] DataURL gen error:", err))
+      .catch((err) => console.error("[PaymentQRModal] DataURL generation error:", err))
   }, [paymentUrl])
 
   // Copy Payment URL
@@ -133,7 +141,7 @@ export function PaymentQRModal({
       setTimeout(() => setCopiedAddress(false), 2000)
       toast({
         title: "Merchant address copied",
-        description: "Settlement wallet address copied to clipboard.",
+        description: "Polygon settlement wallet address copied to clipboard.",
         type: "success",
       })
     } catch {
@@ -167,7 +175,7 @@ export function PaymentQRModal({
   const networkName =
     selectedChainId === POLYGON_AMOY_CHAIN_ID
       ? "Polygon Amoy (80002)"
-      : "Polygon Mainnet (137)"
+      : "Polygon PoS (137)"
 
   return (
     <>
@@ -175,106 +183,122 @@ export function PaymentQRModal({
         isOpen={isOpen}
         onClose={onClose}
         title="Pay Invoice via QR Code"
-        description={`Invoice #${invoice.invoiceNumber} • Public Web3 Polygon Settlement`}
+        description={`Invoice #${invoice.invoiceNumber} • Polygon USDC Settlement`}
         maxWidth="lg"
       >
-        <div className="space-y-5 py-2" id="payment-qr-modal-body">
-          {/* Main 2-Column Responsive Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-            {/* Left Column (5 cols on md): Crisp Scannable QR Presentation */}
-            <div className="md:col-span-5 flex flex-col items-center justify-center p-5 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-3">
-              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs max-w-[260px] w-full flex items-center justify-center">
+        <div className="space-y-4 py-1" id="payment-qr-modal-body">
+          {/* Main Grid: Responsive 2-Column on Desktop, Sleek Stack on Mobile */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+            
+            {/* Left Column: QR Presentation */}
+            <div className="md:col-span-5 flex flex-col items-center justify-center p-3.5 sm:p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center space-y-2.5">
+              {/* Badge for Network & Token */}
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-100/80 border border-purple-200 rounded-full text-purple-900 text-[11px] font-semibold">
+                <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse" />
+                <span>Polygon PoS • {selectedSymbol}</span>
+              </div>
+
+              {/* QR Container with fixed crisp aspect ratio */}
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs w-48 sm:w-52 aspect-square flex items-center justify-center">
                 {qrSvg ? (
                   <div
-                    className="w-full aspect-square flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                    className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
                     dangerouslySetInnerHTML={{ __html: qrSvg }}
                   />
                 ) : (
-                  <div className="w-48 h-48 flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-mono">
+                  <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-mono">
                     Generating QR...
                   </div>
                 )}
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 <span className="text-xs font-bold text-slate-900 block">
-                  Scan with Phone or Web3 Wallet
+                  Scan to Pay in {selectedSymbol}
                 </span>
-                <p className="text-[11px] text-slate-500 max-w-[220px] mx-auto leading-tight">
-                  Point your phone camera or mobile wallet scanner to open the payment page.
+                <p className="text-[11px] text-slate-500 max-w-[210px] mx-auto leading-tight">
+                  Scan with your phone camera or mobile wallet to open checkout.
                 </p>
               </div>
 
               {/* QR Action Buttons */}
-              <div className="flex items-center gap-2 w-full pt-1">
+              <div className="flex items-center gap-2 w-full pt-0.5">
                 <Button
                   onClick={handleDownloadQR}
                   variant="outline"
                   size="sm"
-                  className="flex-1 min-h-[44px] text-xs font-semibold gap-1.5 text-slate-700 border-slate-200 hover:bg-white"
+                  className="flex-1 min-h-[38px] text-xs font-semibold gap-1 text-slate-700 border-slate-200 hover:bg-white"
                   title="Download high-resolution QR PNG"
                 >
-                  <Download className="w-3.5 h-3.5" />
+                  <Download className="w-3.5 h-3.5 text-slate-500" />
                   <span>Save QR</span>
                 </Button>
                 <Button
                   onClick={handlePrintQR}
                   variant="outline"
                   size="sm"
-                  className="flex-1 min-h-[44px] text-xs font-semibold gap-1.5 text-slate-700 border-slate-200 hover:bg-white"
+                  className="flex-1 min-h-[38px] text-xs font-semibold gap-1 text-slate-700 border-slate-200 hover:bg-white"
                   title="Print customer counter payment slip"
                 >
-                  <Printer className="w-3.5 h-3.5" />
+                  <Printer className="w-3.5 h-3.5 text-slate-500" />
                   <span>Print Slip</span>
                 </Button>
               </div>
             </div>
 
-            {/* Right Column (7 cols on md): Authoritative Safety & Invoice Parameters */}
-            <div className="md:col-span-7 space-y-4">
-              {/* Prominent Verification & Safety Header */}
-              <div className="p-4 rounded-xl border border-purple-200 bg-purple-50/60 text-purple-950 space-y-2">
-                <div className="flex items-center gap-2 text-xs font-bold text-purple-900">
-                  <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-                  <span>Authoritative Polygon Payment Request</span>
+            {/* Right Column: Invoice Details & USDC Polygon Selection */}
+            <div className="md:col-span-7 space-y-3">
+              {/* Official Settlement Header */}
+              <div className="p-3 rounded-xl border border-purple-200 bg-purple-50/70 text-purple-950 flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <span className="font-bold text-purple-900 block">
+                    Authoritative Polygon Settlement Request
+                  </span>
+                  <p className="text-purple-800 text-[11px] leading-tight mt-0.5">
+                    Official payment parameters for <strong>{businessName}</strong>.
+                  </p>
                 </div>
-                <p className="text-xs text-purple-800 leading-relaxed">
-                  You are viewing official settlement parameters for{" "}
-                  <strong>{businessName}</strong> Invoice #{invoice.invoiceNumber}.
-                </p>
               </div>
 
-              {/* Invoice Breakdown Parameters */}
-              <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2.5 text-xs">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                  <span className="text-slate-500 font-medium">Billed Amount:</span>
+              {/* Financial Breakdown Card */}
+              <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 text-xs">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                  <span className="text-slate-500 font-medium">Billed Total:</span>
                   <span className="font-extrabold text-slate-900 text-sm">
-                    ${invoice.total} <span className="text-xs uppercase text-slate-500">{invoice.currency}</span>
+                    ${invoice.total} <span className="text-[11px] uppercase text-slate-500 font-medium">{invoice.currency}</span>
                   </span>
                 </div>
 
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                  <span className="text-slate-500 font-medium">Settlement Asset:</span>
-                  <span className="font-bold text-slate-900">
-                    {invoice.total} {selectedSymbol}
-                  </span>
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                  <span className="text-slate-500 font-medium">Settlement Amount:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-purple-700 text-sm">
+                      {invoice.total} {selectedSymbol}
+                    </span>
+                    {selectedSymbol === "USDC" && (
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] px-1.5 py-0">
+                        1:1 USD
+                      </Badge>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                  <span className="text-slate-500 font-medium">Network:</span>
-                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-medium">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-1.5">
+                  <span className="text-slate-500 font-medium">Network Chain:</span>
+                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-semibold">
                     {networkName}
                   </Badge>
                 </div>
 
                 {merchantWalletAddress && (
-                  <div className="pt-1 space-y-1">
-                    <div className="flex justify-between items-center text-slate-500">
-                      <span className="font-medium">Merchant Recipient Address:</span>
+                  <div className="pt-0.5 space-y-1">
+                    <div className="flex justify-between items-center text-slate-500 text-[11px]">
+                      <span className="font-medium">Merchant Receiving Address:</span>
                       <button
                         type="button"
                         onClick={handleCopyAddress}
-                        className="text-purple-600 hover:text-purple-700 flex items-center gap-1 font-semibold text-[11px] cursor-pointer"
+                        className="text-purple-600 hover:text-purple-700 flex items-center gap-1 font-semibold cursor-pointer"
                       >
                         {copiedAddress ? (
                           <>
@@ -289,44 +313,60 @@ export function PaymentQRModal({
                         )}
                       </button>
                     </div>
-                    <p className="font-mono text-[11px] text-slate-800 bg-slate-50 p-2 rounded-lg border border-slate-100 break-all font-semibold">
+                    <p className="font-mono text-[11px] text-slate-800 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100 break-all font-semibold select-all">
                       {merchantWalletAddress}
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* Supported Tokens Bar */}
+              {/* Settlement Token Selector - USDC on Polygon Primary */}
               <div className="space-y-1.5">
-                <span className="text-xs font-semibold text-slate-700 block">
-                  Accepted Settlement Tokens on Polygon:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {availableTokens.map((t) => (
-                    <button
-                      key={t.symbol}
-                      type="button"
-                      onClick={() => setSelectedSymbol(t.symbol)}
-                      className={`min-h-[44px] px-3.5 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                        selectedSymbol === t.symbol
-                          ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                          : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
-                      }`}
-                    >
-                      <span>{t.symbol}</span>
-                      <span className="text-[10px] opacity-80 font-normal">
-                        ({t.isNative ? "Native" : "ERC-20"})
-                      </span>
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800">
+                    Payment Asset on Polygon:
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    USDC Recommended
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {availableTokens.map((t) => {
+                    const isSelected = selectedSymbol === t.symbol
+                    const isUsdc = t.symbol === "USDC"
+                    return (
+                      <button
+                        key={t.symbol}
+                        type="button"
+                        onClick={() => setSelectedSymbol(t.symbol)}
+                        className={`min-h-[40px] px-2 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex flex-col items-center justify-center relative ${
+                          isSelected
+                            ? "bg-purple-600 text-white border-purple-600 shadow-xs"
+                            : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>{t.symbol}</span>
+                          {isUsdc && (
+                            <span className={`text-[8px] uppercase px-1 rounded font-extrabold ${isSelected ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"}`}>
+                              Stable
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] opacity-75 font-normal">
+                          {t.isNative ? "Native" : "Polygon PoS"}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
 
-              {/* Safety Warning */}
-              <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/70 text-amber-900 text-[11px] flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  <strong>Verification Note:</strong> Always verify that the recipient address and payment amount in your Web3 wallet match the invoice details above before signing.
+              {/* Verification & Safety Advice */}
+              <div className="p-2.5 rounded-xl border border-amber-200/80 bg-amber-50/60 text-amber-900 text-[11px] flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                <p className="leading-tight text-[10.5px]">
+                  <strong>Safety Check:</strong> Verify recipient address and exact {selectedSymbol} amount before approving the transaction in your wallet.
                 </p>
               </div>
             </div>
@@ -334,32 +374,32 @@ export function PaymentQRModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-4 border-t border-slate-100">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-3.5 border-t border-slate-100">
           <Button
             onClick={onClose}
             variant="secondary"
             size="sm"
-            className="w-full sm:w-auto min-h-[44px] px-4 text-xs font-semibold text-slate-600 border-slate-200"
+            className="w-full sm:w-auto min-h-[38px] px-3.5 text-xs font-semibold text-slate-600 border-slate-200 order-2 sm:order-1"
           >
             Close
           </Button>
 
-          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto order-1 sm:order-2">
             <Button
               onClick={handleCopyLink}
               variant="outline"
               size="sm"
-              className="w-full sm:w-auto min-h-[44px] px-4 text-xs font-semibold gap-1.5 text-slate-700 border-slate-300 hover:bg-slate-50 cursor-pointer"
+              className="w-full sm:w-auto min-h-[38px] px-3 text-xs font-semibold gap-1.5 text-slate-700 border-slate-300 hover:bg-slate-50 cursor-pointer"
             >
               {copiedLink ? (
                 <>
                   <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Link Copied!</span>
+                  <span className="text-emerald-700 font-bold">Link Copied!</span>
                 </>
               ) : (
                 <>
                   <Copy className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Copy Payment Link</span>
+                  <span>Copy Link</span>
                 </>
               )}
             </Button>
@@ -368,16 +408,16 @@ export function PaymentQRModal({
               href={`/pay/${invoice.id}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full sm:w-auto inline-flex items-center justify-center min-h-[44px] px-5 text-xs font-bold gap-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-xs"
+              className="w-full sm:w-auto inline-flex items-center justify-center min-h-[38px] px-4 text-xs font-bold gap-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl transition-colors shadow-xs"
             >
-              <span>Open Public Checkout</span>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Pay in {selectedSymbol}</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
             </a>
           </div>
         </div>
       </Dialog>
 
-      {/* Hidden container for print slip */}
+      {/* Hidden container for clean print slip */}
       <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-8">
         <PrintableQRPayment
           invoice={invoice}

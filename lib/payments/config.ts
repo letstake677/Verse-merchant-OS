@@ -46,20 +46,20 @@ export const PAYMENT_CONFIRMATION_POLICY = {
 export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
   [POLYGON_MAINNET_CHAIN_ID]: [
     {
-      symbol: "POL",
-      name: "Polygon Ecosystem Token",
-      isNative: true,
-      decimals: 18,
-      chainId: POLYGON_MAINNET_CHAIN_ID,
-    },
-    {
       symbol: "USDC",
-      name: "USD Coin",
+      name: "USD Coin (Polygon PoS)",
       isNative: false,
       decimals: 6,
       address:
         process.env.USDC_POLYGON_CONTRACT_ADDRESS?.trim() ||
         "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+      chainId: POLYGON_MAINNET_CHAIN_ID,
+    },
+    {
+      symbol: "POL",
+      name: "Polygon Ecosystem Token",
+      isNative: true,
+      decimals: 18,
       chainId: POLYGON_MAINNET_CHAIN_ID,
     },
     {
@@ -75,13 +75,6 @@ export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
   ],
   [POLYGON_AMOY_CHAIN_ID]: [
     {
-      symbol: "POL",
-      name: "Polygon Amoy Native",
-      isNative: true,
-      decimals: 18,
-      chainId: POLYGON_AMOY_CHAIN_ID,
-    },
-    {
       symbol: "USDC",
       name: "USD Coin (Amoy Testnet)",
       isNative: false,
@@ -89,6 +82,13 @@ export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
       address:
         process.env.USDC_AMOY_CONTRACT_ADDRESS?.trim() ||
         "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
+      chainId: POLYGON_AMOY_CHAIN_ID,
+    },
+    {
+      symbol: "POL",
+      name: "Polygon Amoy Native",
+      isNative: true,
+      decimals: 18,
       chainId: POLYGON_AMOY_CHAIN_ID,
     },
   ],

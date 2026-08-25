@@ -258,7 +258,7 @@ export default function PublicPayInvoicePage() {
                   <span>Pay Invoice with Web3 Wallet (${invoice.total})</span>
                 </Button>
                 <p className="text-[11px] text-center text-slate-500">
-                  Supported tokens: <span className="font-semibold text-slate-700">POL, USDC, VERSE</span> on Polygon Mainnet
+                  Supported tokens: <span className="font-semibold text-slate-700">USDC, POL, VERSE</span> on Polygon Mainnet
                 </p>
               </div>
             )}
