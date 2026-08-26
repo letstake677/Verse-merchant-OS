@@ -8,7 +8,10 @@ import { Invoice } from "@/lib/invoices/types"
 import { InvoicePaymentModal } from "@/components/invoices/invoice-payment-modal"
 import { PaymentQrModal } from "@/components/payments/payment-qr-modal"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { useAppKit } from "@reown/appkit/react"
+import { useAccount } from "wagmi"
+import { formatWalletAddress } from "@/lib/utils/wallet"
+import { Wallet } from "lucide-react"
 import {
   Zap,
   CreditCard,
@@ -27,6 +30,8 @@ import {
 export default function PublicPayPage() {
   const params = useParams()
   const id = params?.id as string
+  const { open } = useAppKit()
+  const { address, isConnected } = useAccount()
 
   const [invoice, setInvoice] = React.useState<Invoice | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
@@ -100,7 +105,13 @@ export default function PublicPayPage() {
             </div>
             <span className="font-bold text-slate-900">VersePay Checkout</span>
           </div>
-          <ConnectButton showBalance={false} />
+          <button
+            onClick={() => open()}
+            className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Wallet className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{isConnected && address ? formatWalletAddress(address) : "Connect Wallet"}</span>
+          </button>
         </div>
       </header>
 

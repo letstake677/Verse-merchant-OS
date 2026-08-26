@@ -4,7 +4,7 @@ import * as React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/components/ui/toast"
 import { useAccount, useDisconnect, useSignMessage } from "wagmi"
-import { useConnectModal } from "@rainbow-me/rainbowkit"
+import { useAppKit } from "@reown/appkit/react"
 import { 
   ShieldCheck, 
   Wallet, 
@@ -28,7 +28,7 @@ function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
-  const { openConnectModal } = useConnectModal()
+  const { open } = useAppKit()
   
   const { address, isConnected, chain } = useAccount()
   const { disconnectAsync } = useDisconnect()
@@ -86,9 +86,7 @@ function LoginPageContent() {
     if (!isConnected || !address) {
       try {
         setAuthStep("connecting")
-        if (openConnectModal) {
-          openConnectModal()
-        }
+        void open()
       } catch (err: unknown) {
         console.error("[Auth] Wallet modal error:", err)
         setErrorMsg("Unable to open wallet connection modal. Please try again.")
@@ -302,9 +300,7 @@ function LoginPageContent() {
               <button
                 type="button"
                 onClick={() => {
-                  if (openConnectModal) {
-                    openConnectModal()
-                  }
+                  void open()
                 }}
                 className="w-full py-2.5 px-3 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/60 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >

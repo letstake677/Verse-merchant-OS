@@ -10,7 +10,7 @@ import {
 import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/web3/config"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import { useAccount, useSendTransaction, useWriteContract, useSwitchChain, useBalance } from "wagmi"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { useAppKit } from "@reown/appkit/react"
 import { parseUnits, erc20Abi } from "viem"
 import {
   CheckCircle2,
