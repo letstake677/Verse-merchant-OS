@@ -16,9 +16,11 @@ import {
   type AppKitNetwork,
 } from "@reown/appkit/networks"
 
-// 1. Get Project ID from environment variable or fallback
+// 1. Get Project ID from environment variable (supporting NEXT_PUBLIC_ and NEXT_ variants) or fallback
 export const projectId =
-  process.env.NEXT_REOWN_PROJECT_ID || "3a530a37348c4e249485cd3f2441a83d"
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ||
+  process.env.NEXT_REOWN_PROJECT_ID ||
+  "3a530a37348c4e249485cd3f2441a83d"
 
 // 2. Define supported networks
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
