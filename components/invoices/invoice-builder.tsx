@@ -2,7 +2,9 @@
 
 import * as React from "react"
 import { Invoice, InvoiceItem, calculateInvoiceTotals } from "@/lib/invoices/types"
-import { Plus, Trash2, X, Save, ArrowRight } from "lucide-react"
+import { Plus, Trash2, X, Save, ArrowRight, Wallet, AlertCircle } from "lucide-react"
+import { useAccount } from "wagmi"
+import Link from "next/link"
 
 interface InvoiceBuilderProps {
   isOpen: boolean
@@ -11,6 +13,7 @@ interface InvoiceBuilderProps {
 }
 
 export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderProps) {
+  const { address, isConnected } = useAccount()
   const [customerName, setCustomerName] = React.useState("")
   const [customerEmail, setCustomerEmail] = React.useState("")
   const [dueDate, setDueDate] = React.useState(
@@ -28,6 +31,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
     },
   ])
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [submitError, setSubmitError] = React.useState<string | null>(null)
 
   const totals = calculateInvoiceTotals(items)
 
@@ -64,8 +68,13 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isConnected || !address) {
+      setSubmitError("Wallet connection is required to create and sign invoices. Please connect your wallet first.")
+      return
+    }
     if (!customerName) return
     setIsSubmitting(true)
+    setSubmitError(null)
 
     try {
       const res = await fetch("/api/invoices", {
@@ -81,6 +90,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
           subtotal: totals.subtotal,
           tax: totals.tax,
           total: totals.total,
+          merchantAddress: address,
         }),
       })
 
@@ -88,9 +98,13 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
         const data = await res.json()
         onCreated(data.invoice)
         onClose()
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        setSubmitError(errData.error || "Failed to create invoice. Please try again.")
       }
     } catch (err) {
       console.error(err)
+      setSubmitError("Network error while creating invoice.")
     } finally {
       setIsSubmitting(false)
     }
@@ -102,7 +116,14 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-          <h3 className="text-lg font-semibold text-slate-900">Create New Invoice</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-slate-900">Create New Invoice</h3>
+            {address && (
+              <span className="text-[11px] font-mono bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded-md">
+                {address.slice(0, 6)}...{address.slice(-4)}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
@@ -110,6 +131,32 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Wallet connection check banner */}
+        {!isConnected && (
+          <div className="mx-6 mt-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3 text-amber-900">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <p className="font-semibold">Wallet Connection Required</p>
+              <p className="text-amber-700">
+                You must connect your merchant wallet to sign and receive payments on Polygon.
+              </p>
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-1 font-semibold text-amber-900 underline mt-1"
+              >
+                Go to Wallet Sign-In <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {submitError && (
+          <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{submitError}</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto flex-1">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -123,7 +170,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
                 placeholder="e.g. Acme Web3 DAO"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
               />
             </div>
 
@@ -136,7 +183,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
                 placeholder="finance@acme.io"
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
               />
             </div>
 
@@ -148,7 +195,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
               />
             </div>
 
@@ -159,7 +206,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600 bg-white"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
               >
                 <option value="USD">USD ($)</option>
                 <option value="EUR">EUR (€)</option>
@@ -177,7 +224,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
               <button
                 type="button"
                 onClick={handleAddItem}
-                className="text-xs text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-1"
+                className="text-xs text-slate-900 hover:text-slate-700 font-semibold flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Line
               </button>
@@ -191,7 +238,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
                     placeholder="Description"
                     value={item.description}
                     onChange={(e) => handleUpdateItem(idx, "description", e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                   <input
                     type="number"
@@ -199,14 +246,14 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
                     placeholder="Qty"
                     value={item.quantity}
                     onChange={(e) => handleUpdateItem(idx, "quantity", e.target.value)}
-                    className="w-16 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    className="w-16 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                   <input
                     type="text"
                     placeholder="Price"
                     value={item.unitPrice}
                     onChange={(e) => handleUpdateItem(idx, "unitPrice", e.target.value)}
-                    className="w-24 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600 font-mono"
+                    className="w-24 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 font-mono"
                   />
                   <div className="w-20 text-right font-mono text-sm font-semibold text-slate-700">
                     ${item.amount}
@@ -233,7 +280,7 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
             </div>
             <div className="flex justify-between text-base font-bold text-slate-900 pt-1 border-t border-slate-200">
               <span>Total Due</span>
-              <span className="font-mono text-purple-600">${totals.total} {currency}</span>
+              <span className="font-mono text-slate-900 font-bold">${totals.total} {currency}</span>
             </div>
           </div>
 
@@ -247,8 +294,8 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium text-sm rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+              disabled={isSubmitting || !isConnected}
+              className="px-5 py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium text-sm rounded-xl flex items-center gap-2 shadow-xs transition-colors"
             >
               <Save className="w-4 h-4" />
               {isSubmitting ? "Creating..." : "Save & Issue Invoice"}
