@@ -36,7 +36,6 @@ function getRpcUrl(chainId: number): string {
   if (chainId === POLYGON_AMOY_CHAIN_ID) {
     return (
       process.env.POLYGON_AMOY_RPC_URL?.trim() ||
-      process.env.NEXT_PUBLIC_POLYGON_AMOY_RPC_URL?.trim() ||
       "https://rpc-amoy.polygon.technology"
     )
   }
@@ -44,7 +43,6 @@ function getRpcUrl(chainId: number): string {
   return (
     process.env.POLYGON_RPC_URL?.trim() ||
     process.env.POLYGON_MAINNET_RPC_URL?.trim() ||
-    process.env.NEXT_PUBLIC_POLYGON_RPC_URL?.trim() ||
     "https://polygon-rpc.com"
   )
 }

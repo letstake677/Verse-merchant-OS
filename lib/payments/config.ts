@@ -13,7 +13,7 @@ export interface PaymentToken {
 }
 
 export const MERCHANT_RECEIVING_ADDRESS: `0x${string}` =
-  (process.env.NEXT_PUBLIC_MERCHANT_WALLET as `0x${string}`) ||
+  (process.env.MERCHANT_WALLET as `0x${string}`) ||
   "0xFC5499252084f7EbDFe7B9fB7b56A8F08Ec4C8ab"
 
 export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
