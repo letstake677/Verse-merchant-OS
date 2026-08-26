@@ -38,6 +38,7 @@ export function InvoicePaymentModal({
   onClose,
   onSuccess,
 }: InvoicePaymentModalProps) {
+  const { open } = useAppKit()
   const { address, isConnected, chainId } = useAccount()
   const { switchChain } = useSwitchChain()
   const { prices, calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
@@ -355,18 +356,12 @@ export function InvoicePaymentModal({
               {/* Action Buttons */}
               <div className="space-y-3 pt-2">
                 {!isConnected ? (
-                  <div className="flex justify-center">
-                    <ConnectButton.Custom>
-                      {({ openConnectModal }) => (
-                        <button
-                          onClick={openConnectModal}
-                          className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors"
-                        >
-                          <Wallet className="w-4 h-4" /> Connect Wallet to Pay
-                        </button>
-                      )}
-                    </ConnectButton.Custom>
-                  </div>
+                  <button
+                    onClick={() => open()}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors"
+                  >
+                    <Wallet className="w-4 h-4" /> Connect Wallet to Pay
+                  </button>
                 ) : (
                   <button
                     onClick={handlePay}

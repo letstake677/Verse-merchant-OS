@@ -5,9 +5,70 @@ import { MERCHANT_RECEIVING_ADDRESS } from "@/lib/payments/config"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
-  const invoices = getAllInvoices()
-  return NextResponse.json({ ok: true, invoices })
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const search = searchParams.get("search")?.toLowerCase() || ""
+  const status = searchParams.get("status") || "all"
+  const page = parseInt(searchParams.get("page") || "1", 10)
+  const limit = parseInt(searchParams.get("limit") || "20", 10)
+
+  let allInvoices = getAllInvoices()
+
+  // Apply search filter
+  if (search) {
+    allInvoices = allInvoices.filter(
+      (inv) =>
+        inv.invoiceNumber.toLowerCase().includes(search) ||
+        inv.customerName.toLowerCase().includes(search) ||
+        inv.customerEmail?.toLowerCase().includes(search)
+    )
+  }
+
+  // Apply status filter
+  if (status && status !== "all") {
+    allInvoices = allInvoices.filter((inv) => inv.status === status)
+  }
+
+  // Compute summary metrics across all invoices
+  const totalInvoices = allInvoices.length
+  const draftCount = allInvoices.filter((inv) => inv.status === "draft").length
+  
+  let outstanding = 0
+  let paid = 0
+  for (const inv of allInvoices) {
+    const val = parseFloat(inv.total) || 0
+    if (inv.status === "paid") {
+      paid += val
+    } else {
+      outstanding += val
+    }
+  }
+
+  const summary = {
+    totalInvoices,
+    draftCount,
+    outstandingAmount: `$${outstanding.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    paidAmount: `$${paid.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  }
+
+  // Pagination
+  const startIndex = (page - 1) * limit
+  const paginatedInvoices = allInvoices.slice(startIndex, startIndex + limit)
+  const totalPages = Math.ceil(totalInvoices / limit) || 1
+
+  const pagination = {
+    page,
+    limit,
+    total: totalInvoices,
+    totalPages,
+  }
+
+  return NextResponse.json({
+    ok: true,
+    invoices: paginatedInvoices,
+    summary,
+    pagination,
+  })
 }
 
 export async function POST(req: NextRequest) {

@@ -133,12 +133,19 @@ export default function InvoicesPage() {
     })
   }
 
-  const handleViewInvoice = (invoice: Invoice) => {
-    toast({
-      title: `Invoice ${invoice.invoiceNumber}`,
-      description: `Customer: ${invoice.customerName || "Not provided"} • Total: ${invoice.total} ${invoice.currency}`,
-      type: "info",
-    })
+  const handleSelectInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice)
+    setIsDetailOpen(true)
+  }
+
+  const handlePayInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice)
+    setIsPayOpen(true)
+  }
+
+  const handleQrInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice)
+    setIsQrOpen(true)
   }
 
   return (
@@ -150,7 +157,7 @@ export default function InvoicesPage() {
       {/* Invoices Header */}
       <InvoiceHeader />
 
-      {/* 3. Summary Cards (Calculated deterministically from real MongoDB data) */}
+      {/* 3. Summary Cards */}
       <InvoiceSummary
         totalInvoices={summary.totalInvoices}
         draftCount={summary.draftCount}
@@ -174,8 +181,44 @@ export default function InvoicesPage() {
         pagination={pagination}
         onPageChange={(page) => setCurrentPage(page)}
         onLearnMore={handleLearnMore}
-        onViewInvoice={handleViewInvoice}
+        onSelectInvoice={handleSelectInvoice}
+        onViewInvoice={handleSelectInvoice}
+        onPayInvoice={handlePayInvoice}
+        onQrInvoice={handleQrInvoice}
       />
+
+      {/* Modals */}
+      {selectedInvoice && (
+        <>
+          <InvoiceDetail
+            invoice={selectedInvoice}
+            isOpen={isDetailOpen}
+            onClose={() => setIsDetailOpen(false)}
+            onPay={() => {
+              setIsDetailOpen(false)
+              setIsPayOpen(true)
+            }}
+            onQr={() => {
+              setIsDetailOpen(false)
+              setIsQrOpen(true)
+            }}
+          />
+          <InvoicePaymentModal
+            invoice={selectedInvoice}
+            isOpen={isPayOpen}
+            onClose={() => setIsPayOpen(false)}
+            onSuccess={() => {
+              handleRetry()
+              setIsPayOpen(false)
+            }}
+          />
+          <PaymentQrModal
+            invoice={selectedInvoice}
+            isOpen={isQrOpen}
+            onClose={() => setIsQrOpen(false)}
+          />
+        </>
+      )}
     </DashboardShell>
   )
 }

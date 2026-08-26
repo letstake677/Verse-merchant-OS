@@ -4,16 +4,28 @@ import * as React from "react"
 import { Invoice, InvoiceItem, calculateInvoiceTotals } from "@/lib/invoices/types"
 import { Plus, Trash2, X, Save, ArrowRight, Wallet, AlertCircle } from "lucide-react"
 import { useAccount } from "wagmi"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { MERCHANT_RECEIVING_ADDRESS } from "@/lib/payments/config"
 
 interface InvoiceBuilderProps {
-  isOpen: boolean
-  onClose: () => void
-  onCreated: (invoice: Invoice) => void
+  isOpen?: boolean
+  onClose?: () => void
+  onCreated?: (invoice: Invoice) => void
 }
 
-export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderProps) {
+export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBuilderProps) {
+  const router = useRouter()
   const { address, isConnected } = useAccount()
+  const merchantAddr = address || MERCHANT_RECEIVING_ADDRESS
+
+  const handleClose = () => {
+    if (onClose) {
+      onClose()
+    } else {
+      router.push("/dashboard/invoices")
+    }
+  }
   const [customerName, setCustomerName] = React.useState("")
   const [customerEmail, setCustomerEmail] = React.useState("")
   const [dueDate, setDueDate] = React.useState(
@@ -68,11 +80,10 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!isConnected || !address) {
-      setSubmitError("Wallet connection is required to create and sign invoices. Please connect your wallet first.")
+    if (!customerName.trim()) {
+      setSubmitError("Customer name is required.")
       return
     }
-    if (!customerName) return
     setIsSubmitting(true)
     setSubmitError(null)
 
@@ -90,14 +101,20 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
           subtotal: totals.subtotal,
           tax: totals.tax,
           total: totals.total,
-          merchantAddress: address,
+          paymentAddress: merchantAddr,
         }),
       })
 
       if (res.ok) {
         const data = await res.json()
-        onCreated(data.invoice)
-        onClose()
+        if (onCreated) {
+          onCreated(data.invoice)
+        } else {
+          router.push(`/pay/${data.invoice.id}`)
+        }
+        if (onClose) {
+          onClose()
+        }
       } else {
         const errData = await res.json().catch(() => ({}))
         setSubmitError(errData.error || "Failed to create invoice. Please try again.")
@@ -118,14 +135,14 @@ export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderPro
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold text-slate-900">Create New Invoice</h3>
-            {address && (
+            {merchantAddr && (
               <span className="text-[11px] font-mono bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded-md">
-                {address.slice(0, 6)}...{address.slice(-4)}
+                {merchantAddr.slice(0, 6)}...{merchantAddr.slice(-4)}
               </span>
             )}
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
