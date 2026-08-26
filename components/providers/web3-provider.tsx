@@ -40,32 +40,32 @@ export const wagmiAdapter = new WagmiAdapter({
   ssr: true,
 })
 
-// 4. Initialize Reown AppKit Modal (with Email, Socials/X, all Web3 wallets)
-export const modal = createAppKit({
-  adapters: [wagmiAdapter],
-  networks,
-  projectId,
-  metadata: {
-    name: "Verse Merchant OS",
-    description: "Non-custodial crypto payment processor for modern merchants",
-    url: typeof window !== "undefined" && window.location?.origin
-      ? window.location.origin
-      : "https://verse-merchant-os.vercel.app",
-    icons: ["https://avatars.githubusercontent.com/u/179229932"],
-  },
-  features: {
-    analytics: false,
-    email: true,
-    socials: ["google", "x", "github", "discord", "apple"],
-    emailShowWallets: true,
-  },
-  themeMode: "light",
-  themeVariables: {
-    "--w3m-accent": "#4f46e5",
-    "--w3m-border-radius-master": "12px",
-    "--w3m-z-index": 9999,
-  },
-})
+// 4. Initialize Reown AppKit Modal (safely on client)
+export const modal = typeof window !== "undefined"
+  ? createAppKit({
+      adapters: [wagmiAdapter],
+      networks,
+      projectId,
+      metadata: {
+        name: "Verse Merchant OS",
+        description: "Non-custodial crypto payment processor for modern merchants",
+        url: window.location.origin || "https://verse-merchant-os.vercel.app",
+        icons: ["https://avatars.githubusercontent.com/u/179229932"],
+      },
+      features: {
+        analytics: false,
+        email: true,
+        socials: ["google", "x", "github", "discord", "apple"],
+        emailShowWallets: true,
+      },
+      themeMode: "light",
+      themeVariables: {
+        "--w3m-accent": "#4f46e5",
+        "--w3m-border-radius-master": "12px",
+        "--w3m-z-index": 9999,
+      },
+    })
+  : null
 
 export const wagmiConfig = wagmiAdapter.wagmiConfig
 

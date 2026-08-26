@@ -7,9 +7,14 @@ export const POLYGON_AMOY_CHAIN_ID = 80002
 
 export const SUPPORTED_CHAINS = [polygon, polygonAmoy] as const
 
+export const projectId =
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ||
+  process.env.NEXT_REOWN_PROJECT_ID ||
+  "991e204cbf9161a0d33e9ec49b068307"
+
 export const wagmiConfig = getDefaultConfig({
-  appName: "VersePay Merchant Invoicing",
-  projectId: "991e204cbf9161a0d33e9ec49b068307", // Public Demo Project ID
+  appName: "Verse Merchant OS",
+  projectId,
   chains: SUPPORTED_CHAINS,
   transports: {
     [polygon.id]: http("https://polygon-rpc.com"),
