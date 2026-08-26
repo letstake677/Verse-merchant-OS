@@ -1,6 +1,6 @@
 {
-  "name": "Verse Merchant OS",
-  "description": "Simple crypto payments for modern merchants on Verse and Polygon.",
+  "name": "VersePay Merchant Invoicing",
+  "description": "Web3 invoicing & point-of-sale platform with real-time POL, VERSE & USDC conversion on Polygon.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

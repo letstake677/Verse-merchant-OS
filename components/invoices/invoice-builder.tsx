@@ -1,288 +1,260 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { ArrowLeft, Sparkles, FileText, CheckCircle2, AlertCircle } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/components/ui/toast"
-import { InvoiceForm } from "@/components/invoices/invoice-form"
-import { InvoicePreview } from "@/components/invoices/invoice-preview"
-import { InvoiceReview } from "@/components/invoices/invoice-review"
-import {
-  InvoiceFormState,
-  InvoiceFormErrors,
-  InvoiceLineItemErrors,
-  validateInvoiceForm,
-} from "@/types/invoice"
+import { Invoice, InvoiceItem, calculateInvoiceTotals } from "@/lib/invoices/types"
+import { Plus, Trash2, X, Save, ArrowRight } from "lucide-react"
 
-export function InvoiceBuilder() {
-  const router = useRouter()
-  const { toast } = useToast()
+interface InvoiceBuilderProps {
+  isOpen: boolean
+  onClose: () => void
+  onCreated: (invoice: Invoice) => void
+}
 
-  // Builder mode: 'editing' | 'review'
-  const [builderMode, setBuilderMode] = React.useState<"editing" | "review">("editing")
+export function InvoiceBuilder({ isOpen, onClose, onCreated }: InvoiceBuilderProps) {
+  const [customerName, setCustomerName] = React.useState("")
+  const [customerEmail, setCustomerEmail] = React.useState("")
+  const [dueDate, setDueDate] = React.useState(
+    new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]
+  )
+  const [currency, setCurrency] = React.useState("USD")
+  const [notes, setNotes] = React.useState("")
+  const [items, setItems] = React.useState<InvoiceItem[]>([
+    {
+      id: "item-1",
+      description: "Development & Consulting Services",
+      quantity: 1,
+      unitPrice: "0.05",
+      amount: "0.05",
+    },
+  ])
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
-  // Empty, honest initial form state - zero fabricated data
-  const [formData, setFormData] = React.useState<InvoiceFormState>({
-    customerName: "",
-    customerEmail: "",
-    currency: "USD",
-    dueDate: "",
-    items: [
+  const totals = calculateInvoiceTotals(items)
+
+  const handleAddItem = () => {
+    setItems([
+      ...items,
       {
-        id: "item-1",
+        id: `item-${Date.now()}`,
         description: "",
         quantity: 1,
-        unitPrice: "",
+        unitPrice: "0.00",
         amount: "0.00",
       },
-    ],
-    notes: "",
-  })
+    ])
+  }
 
-  // Validation errors state
-  const [errors, setErrors] = React.useState<InvoiceFormErrors>({})
-
-  // Lightweight unsaved changes warning for browser reloads/tabs
-  React.useEffect(() => {
-    const isDirty = Boolean(
-      formData.customerName.trim() ||
-      formData.customerEmail.trim() ||
-      formData.dueDate ||
-      formData.notes.trim() ||
-      formData.items.some((i) => i.description.trim() || i.unitPrice)
-    )
-
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isDirty) {
-        e.preventDefault()
-        e.returnValue = ""
-      }
+  const handleUpdateItem = (index: number, field: keyof InvoiceItem, val: string | number) => {
+    const updated = [...items]
+    const item = { ...updated[index], [field]: val }
+    if (field === "quantity" || field === "unitPrice") {
+      const qty = Number(field === "quantity" ? val : item.quantity) || 0
+      const price = parseFloat(field === "unitPrice" ? (val as string) : item.unitPrice) || 0
+      item.amount = (qty * price).toFixed(2)
     }
+    updated[index] = item
+    setItems(updated)
+  }
 
-    window.addEventListener("beforeunload", handleBeforeUnload)
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
-    }
-  }, [formData])
-
-  // Clear specific field errors when user edits
-  const handleClearError = (
-    field: keyof InvoiceFormErrors,
-    itemIndex?: number,
-    itemField?: keyof InvoiceLineItemErrors
-  ) => {
-    if (field === "items" && itemIndex !== undefined && itemField) {
-      if (errors.items?.[itemIndex]?.[itemField]) {
-        const updatedItemErrors = { ...errors.items }
-        const currentLine = { ...updatedItemErrors[itemIndex] }
-        delete currentLine[itemField]
-
-        if (Object.keys(currentLine).length === 0) {
-          delete updatedItemErrors[itemIndex]
-        } else {
-          updatedItemErrors[itemIndex] = currentLine
-        }
-
-        setErrors({
-          ...errors,
-          items: Object.keys(updatedItemErrors).length > 0 ? updatedItemErrors : undefined,
-          general: undefined,
-        })
-      }
-    } else if (errors[field]) {
-      const updated = { ...errors }
-      delete updated[field]
-      setErrors(updated)
+  const handleRemoveItem = (index: number) => {
+    if (items.length > 1) {
+      setItems(items.filter((_, i) => i !== index))
     }
   }
 
-  // Handle Form Submission / Transition to Review
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    const { isValid, errors: validationErrors } = validateInvoiceForm(formData)
-
-    if (!isValid) {
-      setErrors(validationErrors)
-
-      toast({
-        title: "Incomplete Invoice Form",
-        description: "Please correct the highlighted fields to proceed.",
-        type: "error",
-      })
-
-      // Focus first error field if possible
-      const firstErrorInput = document.querySelector('[aria-invalid="true"]') as HTMLElement | null
-      if (firstErrorInput) {
-        firstErrorInput.focus()
-      }
-      return
-    }
-
-    // Valid: Clear any remaining errors and transition to Review state
-    setErrors({})
-    setBuilderMode("review")
-
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" })
-    }
-  }
-
-  // Return to editing mode
-  const handleBackToEdit = () => {
-    setBuilderMode("editing")
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" })
-    }
-  }
-
-  // Contextual edit from review cards
-  const handleEditSection = (section: "customer" | "details" | "items" | "notes") => {
-    setBuilderMode("editing")
-
-    // Focus corresponding input field after state transition
-    setTimeout(() => {
-      let targetId = ""
-      if (section === "customer") targetId = "customer-name-input"
-      else if (section === "details") targetId = "invoice-currency-select"
-      else if (section === "items") targetId = "item-desc-0"
-      else if (section === "notes") targetId = "customer-notes-textarea"
-
-      const el = document.getElementById(targetId)
-      if (el) {
-        el.focus()
-      }
-    }, 100)
-  }
-
-  // Review confirmation action: Submit to server-side POST /api/invoices
-  const handleConfirmCreate = async () => {
-    // Re-verify validation before creating
-    const { isValid } = validateInvoiceForm(formData)
-    if (!isValid) {
-      setBuilderMode("editing")
-      toast({
-        title: "Form Incomplete",
-        description: "Please review the required invoice fields before proceeding.",
-        type: "error",
-      })
-      return
-    }
-
-    if (isSubmitting) return
-
+    if (!customerName) return
     setIsSubmitting(true)
 
     try {
       const res = await fetch("/api/invoices", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName,
+          customerEmail,
+          dueDate,
+          currency,
+          notes,
+          items,
+          subtotal: totals.subtotal,
+          tax: totals.tax,
+          total: totals.total,
+        }),
       })
 
-      const data = await res.json()
-
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || "Failed to create invoice.")
+      if (res.ok) {
+        const data = await res.json()
+        onCreated(data.invoice)
+        onClose()
       }
-
-      toast({
-        title: "Invoice Created",
-        description: `Invoice ${data.invoice?.invoiceNumber || ""} has been created successfully.`,
-        type: "success",
-      })
-
-      // Navigate to the Invoices list workspace
-      router.push("/dashboard/invoices")
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to create invoice."
-      toast({
-        title: "Invoice Creation Failed",
-        description: errorMessage,
-        type: "error",
-      })
+      console.error(err)
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Render Review Mode
-  if (builderMode === "review") {
-    return (
-      <InvoiceReview
-        formData={formData}
-        onBackToEdit={handleBackToEdit}
-        onEditSection={handleEditSection}
-        onCreateInvoice={handleConfirmCreate}
-        isSubmitting={isSubmitting}
-      />
-    )
-  }
+  if (!isOpen) return null
 
-  // Render Edit Mode
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* 1. Builder Header with Back Navigation */}
-      <div className="flex flex-col gap-3 pb-4 border-b border-slate-100">
-        <div>
-          <Link
-            href="/dashboard/invoices"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors mb-2"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+          <h3 className="text-lg font-semibold text-slate-900">Create New Invoice</h3>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Invoices</span>
-          </Link>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-                  Create Invoice
-                </h1>
-                <Badge
-                  variant="outline"
-                  className="text-[10px] bg-slate-50 text-slate-600 border-slate-200 font-mono"
-                >
-                  Draft
-                </Badge>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-500 font-normal">
-                Create a payment request for your customer.
-              </p>
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Customer / Company Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                required
+                type="text"
+                placeholder="e.g. Acme Web3 DAO"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+              />
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <span className="text-[11px] text-slate-400 font-medium">
-                Step 1: Build & Validate
-              </span>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Customer Email
+              </label>
+              <input
+                type="email"
+                placeholder="finance@acme.io"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Due Date
+              </label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Denomination Currency
+              </label>
+              <select
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600 bg-white"
+              >
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+              </select>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* 2. Responsive 2-Column Layout (Desktop) / 1-Column (Mobile) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
-        {/* Left Column: Form Builder (7 cols on lg) */}
-        <div className="lg:col-span-7 space-y-6">
-          <InvoiceForm
-            formData={formData}
-            onChange={setFormData}
-            errors={errors}
-            onClearError={handleClearError}
-            onSubmit={handleSubmit}
-          />
-        </div>
+          {/* Line Items */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Line Items
+              </span>
+              <button
+                type="button"
+                onClick={handleAddItem}
+                className="text-xs text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Line
+              </button>
+            </div>
 
-        {/* Right Column: Customer Invoice Preview (5 cols on lg) */}
-        <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-6">
-          <InvoicePreview formData={formData} />
-        </div>
+            <div className="space-y-2">
+              {items.map((item, idx) => (
+                <div key={item.id} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Description"
+                    value={item.description}
+                    onChange={(e) => handleUpdateItem(idx, "description", e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Qty"
+                    value={item.quantity}
+                    onChange={(e) => handleUpdateItem(idx, "quantity", e.target.value)}
+                    className="w-16 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Price"
+                    value={item.unitPrice}
+                    onChange={(e) => handleUpdateItem(idx, "unitPrice", e.target.value)}
+                    className="w-24 px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-purple-600 font-mono"
+                  />
+                  <div className="w-20 text-right font-mono text-sm font-semibold text-slate-700">
+                    ${item.amount}
+                  </div>
+                  {items.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(idx)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Totals Preview */}
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-sm">
+            <div className="flex justify-between text-slate-600">
+              <span>Subtotal</span>
+              <span className="font-mono">${totals.subtotal}</span>
+            </div>
+            <div className="flex justify-between text-base font-bold text-slate-900 pt-1 border-t border-slate-200">
+              <span>Total Due</span>
+              <span className="font-mono text-purple-600">${totals.total} {currency}</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 rounded-xl"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-medium text-sm rounded-xl flex items-center gap-2 shadow-sm transition-colors"
+            >
+              <Save className="w-4 h-4" />
+              {isSubmitting ? "Creating..." : "Save & Issue Invoice"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )

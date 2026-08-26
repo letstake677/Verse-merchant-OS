@@ -1,76 +1,67 @@
 "use client"
 
-export const dynamic = "force-dynamic"
-
 import * as React from "react"
 import { useParams } from "next/navigation"
+import { Invoice } from "@/lib/invoices/types"
+import { InvoicePaymentModal } from "@/components/invoices/invoice-payment-modal"
+import { PaymentQrModal } from "@/components/payments/payment-qr-modal"
+import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
+import { ConnectButton } from "@rainbow-me/rainbowkit"
 import {
-  FileText,
+  Zap,
+  CreditCard,
+  QrCode,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
   ShieldCheck,
   Building,
-  CheckCircle2,
+  Calendar,
   AlertCircle,
   Loader2,
-  CreditCard,
-  ExternalLink,
+  RefreshCw,
 } from "lucide-react"
-import { Invoice } from "@/types/invoice"
-import { Payment } from "@/types/payment"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { StatusBadge } from "@/components/ui/status-badge"
-import { InvoicePaymentModal } from "@/components/invoices/invoice-payment-modal"
-import { Button } from "@/components/ui/button"
 
-function formatWalletAddress(address: string): string {
-  if (!address || address.length < 10) return address || ""
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
-
-export default function PublicPayInvoicePage() {
+export default function PublicPayPage() {
   const params = useParams()
-  const rawId = params?.id as string
+  const id = params?.id as string
 
   const [invoice, setInvoice] = React.useState<Invoice | null>(null)
-  const [payment, setPayment] = React.useState<Payment | null>(null)
-  const [merchantWalletAddress, setMerchantWalletAddress] = React.useState<string>("")
-  const [isLoading, setIsLoading] = React.useState<boolean>(true)
-  const [error, setError] = React.useState<string>("")
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState<boolean>(false)
+  const [isLoading, setIsLoading] = React.useState(true)
+  const [error, setError] = React.useState<string | null>(null)
+  const [isPayOpen, setIsPayOpen] = React.useState(false)
+  const [isQrOpen, setIsQrOpen] = React.useState(false)
 
-  const [reloadCounter, setReloadCounter] = React.useState(0)
+  const { prices, calculateAmount, refreshPrices } = useCryptoPrices()
+
+  const fetchInvoice = React.useCallback(async () => {
+    if (!id) return
+    setIsLoading(true)
+    try {
+      const res = await fetch(`/api/invoices/${id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setInvoice(data.invoice)
+      } else {
+        setError("Invoice not found or invalid URL")
+      }
+    } catch (e) {
+      setError("Failed to load invoice details")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [id])
 
   React.useEffect(() => {
-    let isMounted = true
-    if (!rawId) return
-
-    fetch(`/api/invoices/${encodeURIComponent(rawId)}/payment`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Invoice not found or invalid link."))))
-      .then((data) => {
-        if (isMounted && data && data.ok && data.invoice) {
-          setInvoice(data.invoice)
-          if (data.payment) setPayment(data.payment)
-          if (data.merchantWalletAddress) setMerchantWalletAddress(data.merchantWalletAddress)
-        }
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : "Failed to load invoice."
-        if (isMounted) setError(msg)
-      })
-      .finally(() => {
-        if (isMounted) setIsLoading(false)
-      })
-
-    return () => {
-      isMounted = false
-    }
-  }, [rawId, reloadCounter])
+    fetchInvoice()
+  }, [fetchInvoice])
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto" />
-          <p className="text-sm font-semibold text-slate-700">Loading Verse Invoice...</p>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex items-center gap-2 text-slate-500 font-medium text-sm">
+          <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+          Loading Invoice...
         </div>
       </div>
     )
@@ -78,206 +69,166 @@ export default function PublicPayInvoicePage() {
 
   if (error || !invoice) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white p-6 rounded-2xl border border-slate-200 shadow-sm text-center space-y-4">
-          <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full p-6 bg-white rounded-2xl border border-slate-200 text-center space-y-4 shadow-sm">
+          <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
             <AlertCircle className="w-6 h-6" />
           </div>
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-slate-900">Unable to Load Invoice</h2>
-            <p className="text-xs text-slate-500 leading-relaxed">{error || "The requested invoice link is invalid or expired."}</p>
-          </div>
+          <h2 className="text-lg font-bold text-slate-900">Invoice Not Found</h2>
+          <p className="text-sm text-slate-500">{error || "Please verify the link provided by your merchant."}</p>
         </div>
       </div>
     )
   }
 
   const isPaid = invoice.status === "paid"
-  const isCancelled = invoice.status === "cancelled"
-  const isDraft = invoice.status === "draft"
-  const businessName = (invoice as any).businessName || "Verse Merchant"
+  const numericTotal = parseFloat(invoice.total || "0")
+  const polCalc = calculateAmount(numericTotal, invoice.currency || "USD", "POL")
+  const verseCalc = calculateAmount(numericTotal, invoice.currency || "USD", "VERSE")
+  const usdcCalc = calculateAmount(numericTotal, invoice.currency || "USD", "USDC")
 
   return (
-    <div className="min-h-screen bg-slate-50/80 text-slate-900 py-6 sm:py-8 px-3 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto space-y-6">
-        {/* Top Header / Merchant Branding */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-600 flex items-center justify-center text-white font-bold text-base shadow-xs shrink-0">
-              {businessName.slice(0, 1).toUpperCase()}
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+      {/* Top Bar */}
+      <header className="bg-white border-b border-slate-200/80">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white flex items-center justify-center">
+              <Zap className="w-4 h-4 fill-white" />
             </div>
-            <div>
-              <span className="text-sm font-bold tracking-tight text-slate-900 block">
-                {businessName}
-              </span>
-              <span className="text-[11px] text-slate-500 block">
-                Verse Merchant OS • Polygon Web3 Checkout
-              </span>
+            <span className="font-bold text-slate-900">VersePay Checkout</span>
+          </div>
+          <ConnectButton showBalance={false} />
+        </div>
+      </header>
+
+      {/* Main Container */}
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 space-y-6">
+        {/* Main Card */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Header Banner */}
+          <div className="p-6 md:p-8 bg-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-purple-300 uppercase tracking-wider">
+                  Payment Request
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                    isPaid ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"
+                  }`}
+                >
+                  {isPaid ? "Paid & Settled" : "Pending Payment"}
+                </span>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold font-mono">{invoice.invoiceNumber}</h1>
+              <p className="text-sm text-slate-400">Billed to {invoice.customerName}</p>
+            </div>
+
+            <div className="text-left md:text-right">
+              <div className="text-xs text-slate-400 uppercase tracking-wider">Total Due</div>
+              <div className="text-3xl md:text-4xl font-bold font-mono text-purple-400">
+                ${invoice.total} <span className="text-lg text-slate-300 font-sans">{invoice.currency}</span>
+              </div>
             </div>
           </div>
-          <div className="self-start sm:self-auto">
-            <StatusBadge status={invoice.status} size="default" />
+
+          {/* Live Rates Banner */}
+          <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">
+              <span>Settlement Breakdown</span>
+              <button
+                onClick={() => refreshPrices()}
+                className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:underline"
+              >
+                <RefreshCw className="w-3 h-3" /> Live Feed
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 bg-white rounded-xl border border-slate-200/80">
+                <div className="text-xs text-slate-500 font-medium">POL Amount</div>
+                <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{polCalc.tokenAmount}</div>
+                <div className="text-[10px] text-slate-400 font-mono">1 POL ≈ {polCalc.formattedRate}</div>
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-slate-200/80">
+                <div className="text-xs text-slate-500 font-medium">VERSE Amount</div>
+                <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{verseCalc.tokenAmount}</div>
+                <div className="text-[10px] text-slate-400 font-mono">1 VERSE ≈ {verseCalc.formattedRate}</div>
+              </div>
+              <div className="p-3 bg-white rounded-xl border border-slate-200/80">
+                <div className="text-xs text-slate-500 font-medium">USDC Amount</div>
+                <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{usdcCalc.tokenAmount}</div>
+                <div className="text-[10px] text-slate-400 font-mono">1 USDC = $1.00</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Line Items */}
+          <div className="p-6 md:p-8 space-y-6">
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase">
+                  <tr>
+                    <th className="py-3 px-4">Item Description</th>
+                    <th className="py-3 px-4 text-center">Qty</th>
+                    <th className="py-3 px-4 text-right">Unit Price</th>
+                    <th className="py-3 px-4 text-right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {invoice.items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="py-3.5 px-4 font-medium text-slate-900">{item.description}</td>
+                      <td className="py-3.5 px-4 text-center text-slate-600">{item.quantity}</td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-600">${item.unitPrice}</td>
+                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
+                        ${item.amount}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-100">
+              <button
+                onClick={() => setIsQrOpen(true)}
+                className="w-full sm:w-auto px-5 py-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors"
+              >
+                <QrCode className="w-4 h-4 text-purple-600" />
+                Scan QR with Mobile Wallet
+              </button>
+
+              <button
+                onClick={() => setIsPayOpen(true)}
+                disabled={isPaid}
+                className={`w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all ${
+                  isPaid
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-200"
+                }`}
+              >
+                <CreditCard className="w-4 h-4" />
+                {isPaid ? "Invoice Paid" : "Pay with Web3 Wallet"}
+              </button>
+            </div>
           </div>
         </div>
+      </main>
 
-        {/* Paid / Cancelled / Draft Banner */}
-        {isPaid && (
-          <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <div>
-                <h3 className="text-xs font-bold">This Invoice Has Been Settled</h3>
-                <p className="text-[11px] text-emerald-700 mt-0.5">
-                  Payment verified on Polygon blockchain.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {payment?.id && (
-                <a
-                  href={`/payments/${payment.id}/receipt`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 min-h-[44px] px-4 text-xs font-semibold text-emerald-900 bg-emerald-100/80 border border-emerald-300 rounded-lg hover:bg-emerald-200/80 transition-colors"
-                >
-                  <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>View Official Receipt</span>
-                  <ExternalLink className="w-3 h-3 text-emerald-600" />
-                </a>
-              )}
-              <Button
-                onClick={() => {
-                  if (typeof window !== "undefined") window.print()
-                }}
-                variant="outline"
-                size="sm"
-                className="min-h-[44px] px-4 text-xs font-semibold gap-1.5 text-emerald-800 border-emerald-300 hover:bg-emerald-100/50"
-              >
-                <span>Print</span>
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {isCancelled && (
-          <div className="p-4 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-slate-500 shrink-0" />
-            <div>
-              <h3 className="text-xs font-bold">Invoice Cancelled</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                This invoice was cancelled by the merchant and can no longer accept payments.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Invoice Main Card */}
-        <Card className="shadow-sm border-slate-200 bg-white">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-xl font-bold font-mono tracking-tight text-slate-900">
-                  {invoice.invoiceNumber}
-                </CardTitle>
-                <p className="text-xs text-slate-500 mt-1">
-                  Billed to: <span className="font-semibold text-slate-800">{invoice.customerName}</span>
-                  {invoice.customerEmail && ` (${invoice.customerEmail})`}
-                </p>
-              </div>
-              <div className="text-left sm:text-right">
-                <span className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                  ${invoice.total} <span className="text-xs font-semibold text-slate-500 uppercase">{invoice.currency}</span>
-                </span>
-                {merchantWalletAddress && (
-                  <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                    Settlement to {formatWalletAddress(merchantWalletAddress)}
-                  </p>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-6 space-y-6">
-            {/* Items Table */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Invoice Items</h3>
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-                    <tr>
-                      <th className="p-3">Description</th>
-                      <th className="p-3 text-center">Qty</th>
-                      <th className="p-3 text-right">Unit Price</th>
-                      <th className="p-3 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {invoice.items?.map((item, idx) => (
-                      <tr key={item.id || idx}>
-                        <td className="p-3 font-medium text-slate-800">{item.description}</td>
-                        <td className="p-3 text-center text-slate-600">{item.quantity}</td>
-                        <td className="p-3 text-right text-slate-600">${item.unitPrice}</td>
-                        <td className="p-3 text-right font-semibold text-slate-900">${item.amount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Total Breakdown */}
-            <div className="flex justify-end pt-2 border-t border-slate-100">
-              <div className="w-full sm:w-64 space-y-2 text-xs">
-                <div className="flex justify-between text-slate-500">
-                  <span>Subtotal</span>
-                  <span>${invoice.subtotal}</span>
-                </div>
-                {parseFloat(invoice.taxAmount || "0") > 0 && (
-                  <div className="flex justify-between text-slate-500">
-                    <span>Tax ({invoice.taxRate}%)</span>
-                    <span>${invoice.taxAmount}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-sm font-bold text-slate-900 pt-2 border-t border-slate-200">
-                  <span>Total Due</span>
-                  <span>${invoice.total} {invoice.currency}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Pay Action Button */}
-            {!isPaid && !isCancelled && !isDraft && (
-              <div className="pt-4 border-t border-slate-100 space-y-3">
-                <Button
-                  onClick={() => setIsPaymentModalOpen(true)}
-                  variant="primary"
-                  size="lg"
-                  className="w-full h-12 text-sm font-bold gap-2 bg-purple-600 hover:bg-purple-700 text-white shadow-md cursor-pointer"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Pay Invoice with Web3 Wallet (${invoice.total})</span>
-                </Button>
-                <p className="text-[11px] text-center text-slate-500">
-                  Supported tokens: <span className="font-semibold text-slate-700">USDC, POL, VERSE</span> on Polygon Mainnet
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Modal trigger */}
-        {invoice && (
-          <InvoicePaymentModal
-            isOpen={isPaymentModalOpen}
-            onClose={() => setIsPaymentModalOpen(false)}
-            invoice={invoice}
-            onPaymentSuccess={() => {
-              setIsPaymentModalOpen(false)
-              setReloadCounter((c) => c + 1)
-            }}
-          />
-        )}
-      </div>
+      {/* Modals */}
+      <InvoicePaymentModal
+        invoice={invoice}
+        isOpen={isPayOpen}
+        onClose={() => setIsPayOpen(false)}
+        onSuccess={() => fetchInvoice()}
+      />
+      <PaymentQrModal
+        invoice={invoice}
+        isOpen={isQrOpen}
+        onClose={() => setIsQrOpen(false)}
+      />
     </div>
   )
 }

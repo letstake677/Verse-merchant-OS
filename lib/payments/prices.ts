@@ -15,7 +15,7 @@ export interface CryptoPrices {
 }
 
 // Fallback baseline prices in case all external public APIs are unreachable or rate-limited
-const FALLBACK_PRICES: Record<string, number> = {
+export const FALLBACK_PRICES: Record<string, number> = {
   USD: 1.0,
   USDC: 1.0,
   POL: 0.38, // 1 POL ≈ $0.38 USD
@@ -33,7 +33,7 @@ let priceCache: CryptoPrices = {
 const CACHE_TTL_MS = 30 * 1000 // 30 seconds cache
 
 /**
- * Fetches real-time price of POL & VERSE in USD.
+ * Fetches real-time price of POL, VERSE, and USDC in USD.
  */
 export async function getLiveCryptoPrices(): Promise<CryptoPrices> {
   const now = Date.now()
@@ -67,7 +67,7 @@ export async function getLiveCryptoPrices(): Promise<CryptoPrices> {
     console.warn("[Prices] Binance API fetch skipped:", (err as Error).message)
   }
 
-  // 2. Try DexScreener / CoinGecko for VERSE (Polygon contract: 0xc708d6f2153933daa50b2d0758955be0a93a8fec)
+  // 2. Try DexScreener for VERSE (Polygon contract: 0xc708d6f2153933daa50b2d0758955be0a93a8fec)
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 3500)
@@ -127,6 +127,27 @@ export async function getLiveCryptoPrices(): Promise<CryptoPrices> {
     }
   }
 
+  // 4. Fallback: CryptoCompare API
+  if (polPrice === FALLBACK_PRICES.POL || versePrice === FALLBACK_PRICES.VERSE) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 3000)
+      const ccRes = await fetch(
+        "https://min-api.cryptocompare.com/data/pricemulti?fsyms=POL,MATIC,VERSE,USDC&tsyms=USD",
+        { signal: controller.signal }
+      )
+      clearTimeout(timeout)
+      if (ccRes.ok) {
+        const ccData = await ccRes.json()
+        if (ccData.POL?.USD) polPrice = ccData.POL.USD
+        else if (ccData.MATIC?.USD) polPrice = ccData.MATIC.USD
+        if (ccData.VERSE?.USD) versePrice = ccData.VERSE.USD
+      }
+    } catch (e) {
+      console.warn("[Prices] CryptoCompare API skipped:", (e as Error).message)
+    }
+  }
+
   priceCache = {
     USD: 1.0,
     USDC: usdcPrice || 1.0,
@@ -151,13 +172,25 @@ export function calculateTokenAmount(
   invoiceCurrency: string,
   targetTokenSymbol: string,
   prices: CryptoPrices
-): { tokenAmount: string; rate: number; isEstimated: boolean } {
+): {
+  tokenAmount: string
+  rawAmount: number
+  rate: number
+  formattedRate: string
+  isEstimated: boolean
+} {
   const symbol = (targetTokenSymbol || "USDC").toUpperCase().trim()
   const invCurr = (invoiceCurrency || "USD").toUpperCase().trim()
 
   // If already in target crypto, return 1:1
   if (invCurr === symbol) {
-    return { tokenAmount: invoiceAmount.toFixed(symbol === "USDC" ? 2 : 6), rate: 1.0, isEstimated: false }
+    return {
+      tokenAmount: invoiceAmount.toFixed(symbol === "USDC" ? 2 : 6),
+      rawAmount: invoiceAmount,
+      rate: 1.0,
+      formattedRate: "$1.00",
+      isEstimated: false,
+    }
   }
 
   // Determine target token price in USD
@@ -175,7 +208,6 @@ export function calculateTokenAmount(
     tokenPriceUsd = 1.0
   }
 
-  // invoiceAmount is assumed in USD base.
   // Number of tokens = invoiceAmount / tokenPriceUsd
   const rawCryptoAmount = invoiceAmount / tokenPriceUsd
 
@@ -186,15 +218,24 @@ export function calculateTokenAmount(
     // 4 to 6 decimal precision for POL
     formattedAmount = rawCryptoAmount >= 1 ? rawCryptoAmount.toFixed(4) : rawCryptoAmount.toFixed(6)
   } else if (symbol === "VERSE") {
-    // VERSE is a sub-cent token, format to 2 decimals if > 1, or 4 decimals if small
+    // VERSE is a sub-cent token, format to 2 decimals if >= 10, or 4 decimals if small
     formattedAmount = rawCryptoAmount >= 10 ? rawCryptoAmount.toFixed(2) : rawCryptoAmount.toFixed(4)
   } else {
     formattedAmount = rawCryptoAmount.toFixed(6)
   }
 
+  let formattedRate = `$${tokenPriceUsd.toFixed(2)}`
+  if (tokenPriceUsd < 0.01) {
+    formattedRate = `$${tokenPriceUsd.toFixed(6)}`
+  } else if (tokenPriceUsd < 1) {
+    formattedRate = `$${tokenPriceUsd.toFixed(4)}`
+  }
+
   return {
     tokenAmount: formattedAmount,
+    rawAmount: rawCryptoAmount,
     rate: tokenPriceUsd,
+    formattedRate,
     isEstimated: symbol !== "USDC",
   }
 }
