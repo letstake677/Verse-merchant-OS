@@ -6,7 +6,7 @@ import { Invoice } from "@/lib/invoices/types"
 import { SUPPORTED_PAYMENT_TOKENS, MERCHANT_RECEIVING_ADDRESS } from "@/lib/payments/config"
 import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/web3/config"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
-import { X, Copy, Check, QrCode, RefreshCw, ExternalLink } from "lucide-react"
+import { X, Copy, Check, QrCode, RefreshCw, ExternalLink, Loader2 } from "lucide-react"
 
 interface PaymentQrModalProps {
   invoice: Invoice
@@ -18,7 +18,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
   const [selectedChainId, setSelectedChainId] = React.useState<number>(POLYGON_MAINNET_CHAIN_ID)
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
   const [copied, setCopied] = React.useState<boolean>(false)
-  const { prices, calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
+  const { prices, calculateAmount, refreshPrices, isLoading: pricesLoading, isCalculating } = useCryptoPrices()
 
   const availableTokens =
     SUPPORTED_PAYMENT_TOKENS[selectedChainId] ||
@@ -94,7 +94,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
                 >
                   <div className="text-xs">{token.symbol}</div>
                   <div className="text-[11px] text-purple-600 font-mono mt-0.5 truncate">
-                    {calc.tokenAmount}
+                    {calc.isCalculating ? "Calculating..." : calc.tokenAmount}
                   </div>
                 </button>
               )
@@ -121,10 +121,20 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
             </div>
             <div className="mt-4 text-center">
               <div className="text-xl font-mono font-bold text-slate-900">
-                {tokenCalc.tokenAmount} {activeToken.symbol}
+                {tokenCalc.isCalculating ? (
+                  <span className="inline-flex items-center gap-1 text-sm text-purple-600 font-mono animate-pulse">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Calculating rate...
+                  </span>
+                ) : (
+                  `${tokenCalc.tokenAmount} ${activeToken.symbol}`
+                )}
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
-                ≈ ${invoice.total} USD (1 {activeToken.symbol} = {tokenCalc.formattedRate})
+                {tokenCalc.isCalculating ? (
+                  "Fetching live Polygon price feed..."
+                ) : (
+                  `≈ $${invoice.total} USD (1 ${activeToken.symbol} = ${tokenCalc.formattedRate})`
+                )}
               </div>
             </div>
           </div>

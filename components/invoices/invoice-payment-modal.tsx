@@ -279,13 +279,24 @@ export function InvoicePaymentModal({
                       >
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-bold text-sm text-slate-900">{token.symbol}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{calc.formattedRate}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {calc.isCalculating ? "..." : calc.formattedRate}
+                          </span>
                         </div>
                         <div>
-                          <div className="font-bold text-sm text-purple-950 truncate">
-                            {calc.tokenAmount}
-                          </div>
-                          <div className="text-[11px] text-slate-500">{token.symbol}</div>
+                          {calc.isCalculating ? (
+                            <div className="flex items-center gap-1 text-xs text-purple-600 font-medium animate-pulse py-1">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <span>Calculating...</span>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="font-bold text-sm text-purple-950 truncate">
+                                {calc.tokenAmount}
+                              </div>
+                              <div className="text-[11px] text-slate-500">{token.symbol}</div>
+                            </>
+                          )}
                         </div>
                       </button>
                     )
@@ -301,13 +312,27 @@ export function InvoicePaymentModal({
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-600">Real-Time Exchange Rate</span>
-                  <span className="font-medium text-slate-700 font-mono">1 {activeToken.symbol} ≈ {tokenCalc.formattedRate}</span>
+                  {tokenCalc.isCalculating ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-purple-600 animate-pulse font-medium">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Fetching live market rate...
+                    </span>
+                  ) : (
+                    <span className="font-medium text-slate-700 font-mono">
+                      1 {activeToken.symbol} ≈ {tokenCalc.formattedRate}
+                    </span>
+                  )}
                 </div>
                 <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-base font-bold">
                   <span className="text-slate-900">Total to Pay:</span>
-                  <span className="text-purple-600 font-mono text-lg">
-                    {tokenCalc.tokenAmount} {activeToken.symbol}
-                  </span>
+                  {tokenCalc.isCalculating ? (
+                    <span className="inline-flex items-center gap-1.5 text-sm text-purple-600 font-mono animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Calculating {activeToken.symbol}...
+                    </span>
+                  ) : (
+                    <span className="text-purple-600 font-mono text-lg">
+                      {tokenCalc.tokenAmount} {activeToken.symbol}
+                    </span>
+                  )}
                 </div>
                 {isConnected && balanceData && (
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-1">

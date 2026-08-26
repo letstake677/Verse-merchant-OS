@@ -32,7 +32,7 @@ export default function PublicPayPage() {
   const [isPayOpen, setIsPayOpen] = React.useState(false)
   const [isQrOpen, setIsQrOpen] = React.useState(false)
 
-  const { prices, calculateAmount, refreshPrices } = useCryptoPrices()
+  const { prices, calculateAmount, refreshPrices, isCalculating } = useCryptoPrices()
 
   const fetchInvoice = React.useCallback(async () => {
     if (!id) return
@@ -141,24 +141,52 @@ export default function PublicPayPage() {
                 onClick={() => refreshPrices()}
                 className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:underline"
               >
-                <RefreshCw className="w-3 h-3" /> Live Feed
+                <RefreshCw className={`w-3 h-3 ${isCalculating ? "animate-spin" : ""}`} />
+                <span>{isCalculating ? "Calculating Rates..." : "Live Feed"}</span>
               </button>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 bg-white rounded-xl border border-slate-200/80">
                 <div className="text-xs text-slate-500 font-medium">POL Amount</div>
-                <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{polCalc.tokenAmount}</div>
-                <div className="text-[10px] text-slate-400 font-mono">1 POL ≈ {polCalc.formattedRate}</div>
+                {polCalc.isCalculating ? (
+                  <div className="flex items-center gap-1 text-xs text-purple-600 font-medium py-1 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Calculating...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{polCalc.tokenAmount}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">1 POL ≈ {polCalc.formattedRate}</div>
+                  </>
+                )}
               </div>
               <div className="p-3 bg-white rounded-xl border border-slate-200/80">
                 <div className="text-xs text-slate-500 font-medium">VERSE Amount</div>
-                <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{verseCalc.tokenAmount}</div>
-                <div className="text-[10px] text-slate-400 font-mono">1 VERSE ≈ {verseCalc.formattedRate}</div>
+                {verseCalc.isCalculating ? (
+                  <div className="flex items-center gap-1 text-xs text-purple-600 font-medium py-1 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Calculating...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{verseCalc.tokenAmount}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">1 VERSE ≈ {verseCalc.formattedRate}</div>
+                  </>
+                )}
               </div>
               <div className="p-3 bg-white rounded-xl border border-slate-200/80">
                 <div className="text-xs text-slate-500 font-medium">USDC Amount</div>
-                <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{usdcCalc.tokenAmount}</div>
-                <div className="text-[10px] text-slate-400 font-mono">1 USDC = $1.00</div>
+                {usdcCalc.isCalculating ? (
+                  <div className="flex items-center gap-1 text-xs text-purple-600 font-medium py-1 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Calculating...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-base font-bold font-mono text-slate-900 mt-0.5">{usdcCalc.tokenAmount}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">1 USDC = $1.00</div>
+                  </>
+                )}
               </div>
             </div>
           </div>

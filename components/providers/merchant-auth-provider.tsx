@@ -178,10 +178,24 @@ export function MerchantAuthProvider({ children }: { children: React.ReactNode }
   )
 }
 
+const defaultMerchantAuthContext: MerchantAuthContextValue = {
+  merchant: null,
+  authenticatedWallet: null,
+  connectedWallet: undefined,
+  isAuthenticated: false,
+  isLoading: true,
+  isWalletMismatch: false,
+  isWrongNetwork: false,
+  currentChainId: undefined,
+  refreshSession: async () => {},
+  signOut: async () => {},
+  disconnectWallet: async () => {},
+}
+
 export function useMerchantSession() {
   const context = React.useContext(MerchantAuthContext)
   if (!context) {
-    throw new Error("useMerchantSession must be used within a MerchantAuthProvider")
+    return defaultMerchantAuthContext
   }
   return context
 }

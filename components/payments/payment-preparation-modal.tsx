@@ -18,6 +18,7 @@ import {
   Info,
   Clock,
   ArrowRight,
+  Loader2,
 } from "lucide-react"
 import { Dialog } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { Invoice } from "@/types/invoice"
 import { PaymentIntent } from "@/types/payment-intent"
 import { POLYGON_MAINNET_CHAIN_ID, SUPPORTED_PAYMENT_TOKENS } from "@/lib/payments/config"
+import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 
 function formatWalletAddress(address: string): string {
   if (!address || address.length < 10) return address || ""
@@ -50,6 +52,7 @@ export function PaymentPreparationModal({
   const currentChainId = useChainId()
   const { connect, connectors, isPending: isConnecting } = useConnect()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
+  const { calculateAmount, refreshPrices, isCalculating } = useCryptoPrices()
 
   const [copiedMerchant, setCopiedMerchant] = React.useState(false)
   const [copiedPayer, setCopiedPayer] = React.useState(false)
@@ -61,6 +64,9 @@ export function PaymentPreparationModal({
   )
   const [isCreatingIntent, setIsCreatingIntent] = React.useState(false)
   const [errorMsg, setErrorMsg] = React.useState("")
+
+  const invoiceAmountNum = parseFloat(invoice.total || "0")
+  const selectedCalc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", selectedTokenSymbol)
 
   const isPolygonChain = currentChainId === POLYGON_MAINNET_CHAIN_ID
   const isPayerMatchesMerchant =
@@ -171,12 +177,23 @@ export function PaymentPreparationModal({
 
         {/* 2. Token & Network Selection */}
         <div className="space-y-2">
-          <label className="block text-xs font-semibold text-slate-700">
-            Settlement Asset & Network Configuration:
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold text-slate-700">
+              Settlement Asset & Network Configuration:
+            </label>
+            <button
+              type="button"
+              onClick={() => refreshPrices()}
+              className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:text-purple-700 font-medium"
+            >
+              <RefreshCw className={`w-3 h-3 ${isCalculating ? "animate-spin" : ""}`} />
+              <span>{isCalculating ? "Updating Rates..." : "Live Market Feed"}</span>
+            </button>
+          </div>
           <div className="grid grid-cols-3 gap-2">
             {(SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []).map((t) => {
               const isSelected = selectedTokenSymbol === t.symbol
+              const calc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", t.symbol)
               return (
                 <button
                   key={t.symbol}
@@ -184,7 +201,7 @@ export function PaymentPreparationModal({
                   onClick={() => setSelectedTokenSymbol(t.symbol)}
                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                     isSelected
-                      ? "border-purple-600 bg-purple-50/50 ring-1 ring-purple-600/20"
+                      ? "border-purple-600 bg-purple-50/50 ring-1 ring-purple-600/20 shadow-xs"
                       : "border-slate-200 bg-white hover:border-slate-300"
                   }`}
                 >
@@ -193,9 +210,23 @@ export function PaymentPreparationModal({
                     {isSelected && <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />}
                   </div>
                   <p className="text-[10px] text-slate-500 mt-0.5 truncate">{t.name}</p>
-                  <p className="text-[11px] font-semibold text-slate-800 mt-1">
-                    {invoice.total} {t.symbol}
-                  </p>
+                  <div className="mt-1.5">
+                    {calc.isCalculating ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-purple-600 font-medium animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Calculating...</span>
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-[12px] font-bold font-mono text-slate-900 block">
+                          {calc.tokenAmount} {t.symbol}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono block">
+                          1 {t.symbol} ≈ {calc.formattedRate}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </button>
               )
             })}

@@ -15,6 +15,8 @@ import {
   Send,
   Printer,
   Sparkles,
+  Loader2,
+  RefreshCw,
 } from "lucide-react"
 
 interface InvoiceDetailProps {
@@ -27,7 +29,7 @@ interface InvoiceDetailProps {
 
 export function InvoiceDetail({ invoice, isOpen, onClose, onPay, onQr }: InvoiceDetailProps) {
   const [copied, setCopied] = React.useState(false)
-  const { prices, calculateAmount } = useCryptoPrices()
+  const { prices, calculateAmount, refreshPrices, isCalculating } = useCryptoPrices()
   const isPaid = invoice.status === "paid"
 
   const numericTotal = parseFloat(invoice.total || "0")
@@ -90,31 +92,65 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onPay, onQr }: Invoice
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <span>Live Settlement Rates</span>
-              <span className="text-[11px] text-purple-600 font-normal">Real-time Polygon Market Feed</span>
+              <button
+                type="button"
+                onClick={() => refreshPrices()}
+                className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:text-purple-700 font-medium"
+              >
+                <RefreshCw className={`w-3 h-3 ${isCalculating ? "animate-spin" : ""}`} />
+                <span>{isCalculating ? "Calculating..." : "Real-time Polygon Market Feed"}</span>
+              </button>
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 text-left">
                 <div className="text-xs font-semibold text-slate-700">POL (Native)</div>
-                <div className="text-base font-bold font-mono text-purple-950 mt-0.5">
-                  {polCalc.tokenAmount}
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono">1 POL ≈ {polCalc.formattedRate}</div>
+                {polCalc.isCalculating ? (
+                  <div className="flex items-center gap-1 text-xs text-purple-600 font-medium py-1 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Calculating...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-base font-bold font-mono text-purple-950 mt-0.5">
+                      {polCalc.tokenAmount}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">1 POL ≈ {polCalc.formattedRate}</div>
+                  </>
+                )}
               </div>
 
               <div className="p-3 bg-violet-50/50 rounded-xl border border-violet-100 text-left">
                 <div className="text-xs font-semibold text-slate-700">VERSE</div>
-                <div className="text-base font-bold font-mono text-violet-950 mt-0.5">
-                  {verseCalc.tokenAmount}
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono">1 VERSE ≈ {verseCalc.formattedRate}</div>
+                {verseCalc.isCalculating ? (
+                  <div className="flex items-center gap-1 text-xs text-violet-600 font-medium py-1 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Calculating...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-base font-bold font-mono text-violet-950 mt-0.5">
+                      {verseCalc.tokenAmount}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">1 VERSE ≈ {verseCalc.formattedRate}</div>
+                  </>
+                )}
               </div>
 
               <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 text-left">
                 <div className="text-xs font-semibold text-slate-700">USDC</div>
-                <div className="text-base font-bold font-mono text-blue-950 mt-0.5">
-                  {usdcCalc.tokenAmount}
-                </div>
-                <div className="text-[10px] text-slate-400 font-mono">1 USDC = $1.00</div>
+                {usdcCalc.isCalculating ? (
+                  <div className="flex items-center gap-1 text-xs text-blue-600 font-medium py-1 animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Calculating...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-base font-bold font-mono text-blue-950 mt-0.5">
+                      {usdcCalc.tokenAmount}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">1 USDC = $1.00</div>
+                  </>
+                )}
               </div>
             </div>
           </div>

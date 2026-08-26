@@ -3,8 +3,10 @@
 import * as React from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { WagmiProvider } from "wagmi"
-import { RainbowKitProvider, darkTheme, lightTheme } from "@rainbow-me/rainbowkit"
+import { RainbowKitProvider, lightTheme } from "@rainbow-me/rainbowkit"
 import { wagmiConfig } from "@/lib/web3/config"
+import { ToastProvider } from "@/components/ui/toast"
+import { MerchantAuthProvider } from "@/components/providers/merchant-auth-provider"
 import "@rainbow-me/rainbowkit/styles.css"
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -30,9 +32,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
             borderRadius: "medium",
           })}
         >
-          {children}
+          <ToastProvider>
+            <MerchantAuthProvider>
+              {children}
+            </MerchantAuthProvider>
+          </ToastProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
   )
 }
+
