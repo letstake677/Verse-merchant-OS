@@ -1,7 +1,5 @@
 "use client"
 
-export const dynamic = "force-dynamic"
-
 import * as React from "react"
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { InvoiceHeader } from "@/components/invoices/invoice-header"
@@ -15,10 +13,16 @@ import { useToast } from "@/components/ui/toast"
 export default function InvoicesPage() {
   const { toast } = useToast()
 
-  // Real invoices state from MongoDB
+  // Real invoices state from storage
   const [invoices, setInvoices] = React.useState<Invoice[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+
+  // Selected invoice and modal states
+  const [selectedInvoice, setSelectedInvoice] = React.useState<Invoice | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = React.useState(false)
+  const [isPayOpen, setIsPayOpen] = React.useState(false)
+  const [isQrOpen, setIsQrOpen] = React.useState(false)
 
   const [pagination, setPagination] = React.useState({
     page: 1,
