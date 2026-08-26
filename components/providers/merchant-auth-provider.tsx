@@ -87,7 +87,6 @@ export function MerchantAuthProvider({ children }: { children: React.ReactNode }
   }, [isProtectedPath, router])
 
   React.useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchSession()
   }, [fetchSession])
 
