@@ -86,7 +86,12 @@ function LoginPageContent() {
     if (!isConnected || !address) {
       try {
         setAuthStep("connecting")
-        await open()
+        if (typeof open === "function") {
+          await open()
+        } else {
+          const { modal } = await import("@/components/providers/web3-provider")
+          await modal.open()
+        }
       } catch (err: unknown) {
         console.error("[Auth] Reown AppKit open error:", err)
         setErrorMsg("Unable to open wallet connection modal. Please try again.")
@@ -299,7 +304,13 @@ function LoginPageContent() {
             {isConnected && !isBusy && (
               <button
                 type="button"
-                onClick={() => open()}
+                onClick={() => {
+                  if (typeof open === "function") {
+                    void open()
+                  } else {
+                    void import("@/components/providers/web3-provider").then(({ modal }) => modal.open())
+                  }
+                }}
                 className="w-full py-2.5 px-3 border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-semibold text-slate-700 bg-slate-50/60 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Wallet className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
