@@ -10,6 +10,7 @@ import {
   isSettlementChainSupported,
   PRIMARY_SETTLEMENT_CHAIN_ID,
 } from "@/lib/payments/config"
+import { getLiveCryptoPrices, calculateTokenAmount } from "@/lib/payments/prices"
 import { checkRateLimit, createRateLimitResponse } from "@/lib/auth/rate-limiter"
 import { AppLogger } from "@/lib/observability/logger"
 
@@ -254,6 +255,21 @@ export async function POST(
       )
     }
 
+    // Calculate exact crypto token amount using live price conversion feed
+    let tokenPaymentAmount = invoice.total
+    try {
+      const prices = await getLiveCryptoPrices()
+      const numericTotal = parseFloat(invoice.total || "0")
+      if (numericTotal > 0) {
+        const calc = calculateTokenAmount(numericTotal, invoice.currency || "USD", paymentToken.symbol, prices)
+        if (calc && calc.tokenAmount) {
+          tokenPaymentAmount = calc.tokenAmount
+        }
+      }
+    } catch (priceErr) {
+      console.warn("[payment/route] Live price calc fallback:", priceErr)
+    }
+
     // 4. If active intent exists with identical currency and token, reuse it to avoid duplicate intents
     if (
       existingActive &&
@@ -265,6 +281,7 @@ export async function POST(
         ok: true,
         payment: sanitizePublicPayment(existingActive),
         invoice: sanitizePublicInvoice(invoice, merchantBusinessName),
+        calculatedAmount: tokenPaymentAmount,
       })
     }
 
@@ -272,7 +289,7 @@ export async function POST(
     const newPayment = await PaymentRepository.createPayment({
       merchantId: invoice.merchantId,
       invoiceId: invoice.id,
-      amount: invoice.total,
+      amount: tokenPaymentAmount,
       currency: invoice.currency,
       token: paymentToken,
       chainId,
