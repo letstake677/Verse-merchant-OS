@@ -1,4 +1,4 @@
-// Vercel Redeployment Triggered
+// VersePay Merchant OS - Build Sync Update
 "use client"
 
 export const dynamic = "force-dynamic"
