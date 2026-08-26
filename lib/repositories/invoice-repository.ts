@@ -632,4 +632,31 @@ export class InvoiceRepository {
       throw new Error("Failed to mark invoice as paid.")
     }
   }
+
+  /**
+   * Deletes an invoice permanently from the database, strictly scoped to the invoice creator (merchant).
+   *
+   * @param invoiceId - Hexadecimal MongoDB ObjectId string
+   * @param merchantId - Authenticated merchant identifier (creator)
+   */
+  static async deleteInvoiceForMerchant(
+    invoiceId: string,
+    merchantId: string
+  ): Promise<boolean> {
+    if (!invoiceId || !merchantId) return false
+    if (!ObjectId.isValid(invoiceId)) return false
+
+    try {
+      const collection = await this.getCollection()
+      const result = await collection.deleteOne({
+        _id: new ObjectId(invoiceId),
+        merchantId,
+      })
+
+      return result.deletedCount > 0
+    } catch (error) {
+      console.error("[InvoiceRepository.deleteInvoiceForMerchant] Error:", error)
+      throw new Error("Failed to delete invoice record.")
+    }
+  }
 }
