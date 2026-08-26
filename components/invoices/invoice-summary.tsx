@@ -2,16 +2,56 @@
 
 import * as React from "react"
 import { Invoice } from "@/lib/invoices/types"
-import { DollarSign, FileText, CheckCircle2, Clock, Zap } from "lucide-react"
+import { DollarSign, FileText, CheckCircle2, Clock } from "lucide-react"
 
-export function InvoiceSummary({ invoices }: { invoices: Invoice[] }) {
-  const totalVolume = invoices.reduce((acc, inv) => acc + parseFloat(inv.total || "0"), 0)
-  const paidVolume = invoices
-    .filter((inv) => inv.status === "paid")
-    .reduce((acc, inv) => acc + parseFloat(inv.total || "0"), 0)
-  const pendingVolume = invoices
-    .filter((inv) => inv.status !== "paid")
-    .reduce((acc, inv) => acc + parseFloat(inv.total || "0"), 0)
+interface InvoiceSummaryProps {
+  invoices?: Invoice[]
+  totalInvoices?: number
+  draftCount?: number
+  outstandingAmount?: string | number
+  paidAmount?: string | number
+}
+
+export function InvoiceSummary({
+  invoices,
+  totalInvoices,
+  draftCount,
+  outstandingAmount,
+  paidAmount,
+}: InvoiceSummaryProps) {
+  const safeInvoices = Array.isArray(invoices) ? invoices : []
+
+  // If explicit metric props are passed (from dashboard/invoices), use them; otherwise calculate from invoices array
+  const totalVolumeNum =
+    outstandingAmount !== undefined && paidAmount !== undefined
+      ? (typeof paidAmount === "string" ? parseFloat(paidAmount.replace(/[^0-9.-]+/g, "")) || 0 : Number(paidAmount) || 0) +
+        (typeof outstandingAmount === "string" ? parseFloat(outstandingAmount.replace(/[^0-9.-]+/g, "")) || 0 : Number(outstandingAmount) || 0)
+      : safeInvoices.reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
+
+  const paidVolumeDisplay =
+    paidAmount !== undefined
+      ? typeof paidAmount === "number"
+        ? `$${paidAmount.toFixed(2)}`
+        : paidAmount
+      : `$${safeInvoices
+          .filter((inv) => inv?.status === "paid" || inv?.status === "PAID")
+          .reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
+          .toFixed(2)}`
+
+  const pendingVolumeDisplay =
+    outstandingAmount !== undefined
+      ? typeof outstandingAmount === "number"
+        ? `$${outstandingAmount.toFixed(2)}`
+        : outstandingAmount
+      : `$${safeInvoices
+          .filter((inv) => inv?.status !== "paid" && inv?.status !== "PAID")
+          .reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
+          .toFixed(2)}`
+
+  const totalCount =
+    totalInvoices !== undefined
+      ? totalInvoices
+      : safeInvoices.length
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -21,7 +61,9 @@ export function InvoiceSummary({ invoices }: { invoices: Invoice[] }) {
         </div>
         <div>
           <div className="text-xs text-slate-500 font-medium uppercase tracking-wider">Total Volume</div>
-          <div className="text-xl font-bold text-slate-900 font-mono">${totalVolume.toFixed(2)}</div>
+          <div className="text-xl font-bold text-slate-900 font-mono">
+            ${typeof totalVolumeNum === "number" ? totalVolumeNum.toFixed(2) : totalVolumeNum}
+          </div>
         </div>
       </div>
 
@@ -31,7 +73,7 @@ export function InvoiceSummary({ invoices }: { invoices: Invoice[] }) {
         </div>
         <div>
           <div className="text-xs text-slate-500 font-medium uppercase tracking-wider">Settled On-Chain</div>
-          <div className="text-xl font-bold text-slate-900 font-mono">${paidVolume.toFixed(2)}</div>
+          <div className="text-xl font-bold text-slate-900 font-mono">{paidVolumeDisplay}</div>
         </div>
       </div>
 
@@ -41,7 +83,7 @@ export function InvoiceSummary({ invoices }: { invoices: Invoice[] }) {
         </div>
         <div>
           <div className="text-xs text-slate-500 font-medium uppercase tracking-wider">Pending Settlement</div>
-          <div className="text-xl font-bold text-slate-900 font-mono">${pendingVolume.toFixed(2)}</div>
+          <div className="text-xl font-bold text-slate-900 font-mono">{pendingVolumeDisplay}</div>
         </div>
       </div>
 
@@ -51,7 +93,7 @@ export function InvoiceSummary({ invoices }: { invoices: Invoice[] }) {
         </div>
         <div>
           <div className="text-xs text-slate-500 font-medium uppercase tracking-wider">Invoices Issued</div>
-          <div className="text-xl font-bold text-slate-900 font-mono">{invoices.length}</div>
+          <div className="text-xl font-bold text-slate-900 font-mono">{totalCount}</div>
         </div>
       </div>
     </div>

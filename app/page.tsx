@@ -1,5 +1,7 @@
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import * as React from "react"
 import { Invoice } from "@/lib/invoices/types"
 import { INITIAL_INVOICES } from "@/lib/invoices/data"
