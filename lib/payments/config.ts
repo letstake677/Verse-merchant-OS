@@ -1,4 +1,5 @@
-import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "../web3/config"
+export const POLYGON_MAINNET_CHAIN_ID = 137
+export const POLYGON_AMOY_CHAIN_ID = 80002
 
 export interface PaymentToken {
   symbol: string
@@ -64,7 +65,53 @@ export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
   ],
 }
 
+export function isSettlementChainSupported(chainId: number): boolean {
+  return chainId === POLYGON_MAINNET_CHAIN_ID || chainId === POLYGON_AMOY_CHAIN_ID
+}
+
+export function resolvePaymentToken(
+  tokenSymbolOrAddress: string,
+  chainId: number = POLYGON_MAINNET_CHAIN_ID
+): PaymentToken | null {
+  const tokens = SUPPORTED_PAYMENT_TOKENS[chainId] || []
+  const query = tokenSymbolOrAddress.trim().toLowerCase()
+
+  const found = tokens.find(
+    (t) =>
+      t.symbol.toLowerCase() === query ||
+      t.name.toLowerCase() === query ||
+      t.address.toLowerCase() === query
+  )
+
+  return found || null
+}
+
+export function getDefaultPaymentTokenForInvoiceCurrency(
+  currency: string = "USD",
+  chainId: number = POLYGON_MAINNET_CHAIN_ID
+): PaymentToken {
+  const normalized = (currency || "USD").toUpperCase().trim()
+  const tokens = SUPPORTED_PAYMENT_TOKENS[chainId] || SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID]
+
+  if (normalized === "POL" || normalized === "MATIC") {
+    const pol = tokens.find((t) => t.isNative || t.symbol === "POL")
+    if (pol) return pol
+  }
+
+  if (normalized === "VERSE") {
+    const verse = tokens.find((t) => t.symbol === "VERSE")
+    if (verse) return verse
+  }
+
+  // Default to USDC for fiat USD / USDC settlement
+  const usdc = tokens.find((t) => t.symbol === "USDC")
+  if (usdc) return usdc
+
+  return tokens[0]
+}
+
 export const PAYMENT_CONFIRMATION_POLICY = {
   requiredConfirmations: 2,
   pollIntervalMs: 3000,
 }
+

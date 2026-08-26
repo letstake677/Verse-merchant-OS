@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
       fs: false,
       net: false,
       tls: false,
+      "@react-native-async-storage/async-storage": false,
     };
     config.externals = [...(config.externals || []), "pino-pretty", "lokijs", "encoding"];
     return config;
