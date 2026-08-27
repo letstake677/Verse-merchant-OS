@@ -29,6 +29,7 @@ interface PaymentQrModalProps {
   isOpen: boolean
   onClose: () => void
   onPaid?: () => void
+  isCreator?: boolean
 }
 
 function safeParseBaseUnits(amountStr: string, decimals: number): string {
@@ -45,42 +46,55 @@ function safeParseBaseUnits(amountStr: string, decimals: number): string {
   }
 }
 
-export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrModalProps) {
+export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = false }: PaymentQrModalProps) {
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
   const [qrType, setQrType] = React.useState<"eip681" | "address" | "link">("eip681")
   const [copied, setCopied] = React.useState<boolean>(false)
   const [isDetectedPaid, setIsDetectedPaid] = React.useState<boolean>(invoice.status === "paid")
   const [manualTxHash, setManualTxHash] = React.useState<string>("")
   const [isVerifyingTx, setIsVerifyingTx] = React.useState<boolean>(false)
+  const [isMarkingReceived, setIsMarkingReceived] = React.useState<boolean>(false)
   const [txError, setTxError] = React.useState<string | null>(null)
+  const [isCreatorState, setIsCreatorState] = React.useState<boolean>(isCreator)
 
   const { calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
 
-  // Polling for automated payment detection while QR code is open
   React.useEffect(() => {
-    if (!isOpen || isDetectedPaid) return
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tokenSymbol: selectedSymbol }),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.isPaid || data.status === "paid") {
-            setIsDetectedPaid(true)
-            if (onPaid) onPaid()
-          }
+    if (!isOpen) return
+    if (isCreator) {
+      setIsCreatorState(true)
+      return
+    }
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.authenticated) {
+          setIsCreatorState(true)
         }
-      } catch {
-        // Continue polling
-      }
-    }, 3000)
+      })
+      .catch(() => {})
+  }, [isOpen, isCreator])
 
-    return () => clearInterval(interval)
-  }, [isOpen, invoice.id, isDetectedPaid, onPaid, selectedSymbol])
+  const handleMarkReceived = async () => {
+    setIsMarkingReceived(true)
+    setTxError(null)
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/mark-received`, {
+        method: "POST",
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        setIsDetectedPaid(true)
+        if (onPaid) onPaid()
+      } else {
+        setTxError(data.error || "Failed to mark invoice as received.")
+      }
+    } catch {
+      setTxError("Network error while marking payment as received.")
+    } finally {
+      setIsMarkingReceived(false)
+    }
+  }
 
   const handleManualVerify = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -360,71 +374,57 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
             </div>
           </div>
 
-          {/* Manual Transaction Verification Form & Auto Check Button */}
-          <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-100 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-600"></span>
-                </span>
-                <span className="text-xs font-semibold text-purple-950">Auto-scanning Polygon network</span>
+          {/* Invoice Creator "I Received Payment" Section */}
+          {isCreatorState ? (
+            <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-900">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Invoice Creator Action</span>
               </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Payment wallet me milne ke baad niche button click karein to mark invoice as <strong>Paid</strong>:
+              </p>
               <button
                 type="button"
-                onClick={async () => {
-                  setIsVerifyingTx(true)
-                  setTxError(null)
-                  try {
-                    const res = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ tokenSymbol: selectedSymbol }),
-                    })
-                    const data = await res.json()
-                    if (data.isPaid || data.status === "paid") {
-                      setIsDetectedPaid(true)
-                      if (onPaid) onPaid()
-                    } else {
-                      setTxError("No new transaction detected for this invoice yet. If you completed payment, paste your Tx Hash below.")
-                    }
-                  } catch {
-                    setTxError("Verification check failed. Please check network connection.")
-                  } finally {
-                    setIsVerifyingTx(false)
-                  }
-                }}
-                disabled={isVerifyingTx}
-                className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1"
+                onClick={handleMarkReceived}
+                disabled={isMarkingReceived || isDetectedPaid}
+                className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
               >
-                {isVerifyingTx ? <Loader2 className="w-3 h-3 animate-spin text-purple-700" /> : <RefreshCw className="w-3 h-3 text-purple-700" />}
-                <span>Check Now</span>
+                {isMarkingReceived ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>I Received Payment (Mark as Paid)</span>
               </button>
-            </div>
-
-            <form onSubmit={handleManualVerify} className="space-y-1.5 pt-1 border-t border-purple-100">
-              <label className="text-[11px] font-medium text-slate-600 block">
-                Optionally paste Tx Hash if auto-detect is delayed:
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={manualTxHash}
-                  onChange={(e) => setManualTxHash(e.target.value)}
-                  placeholder="Polygon transaction hash (0x...)"
-                  className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
-                />
-                <button
-                  type="submit"
-                  disabled={isVerifyingTx}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 shadow-xs"
-                >
-                  {isVerifyingTx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify Hash"}
-                </button>
-              </div>
               {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
-            </form>
-          </div>
+            </div>
+          ) : (
+            <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-100 space-y-2.5">
+              <p className="text-xs font-medium text-slate-700">
+                Send exact payment on Polygon and submit your Transaction Hash below if requested:
+              </p>
+              <form onSubmit={handleManualVerify} className="space-y-1.5 pt-1 border-t border-purple-100">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={manualTxHash}
+                    onChange={(e) => setManualTxHash(e.target.value)}
+                    placeholder="Polygon transaction hash (0x...)"
+                    className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isVerifyingTx}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 shadow-xs"
+                  >
+                    {isVerifyingTx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify Hash"}
+                  </button>
+                </div>
+                {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
+              </form>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="pt-2 border-t border-slate-100 flex items-center gap-3">

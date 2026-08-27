@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Printer, Copy, Check, Share2, Edit3, XCircle, Wallet, QrCode } from "lucide-react"
+import { Printer, Copy, Check, Share2, Edit3, XCircle, Wallet, QrCode, CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/toast"
 import { InvoiceStatus } from "@/types/invoice"
@@ -17,6 +17,7 @@ interface InvoiceDetailActionsProps {
   onCancelInvoice?: () => void
   onPayInvoice?: () => void
   onShowQR?: () => void
+  onMarkReceived?: () => void
 }
 
 function subscribe() {
@@ -41,10 +42,50 @@ export function InvoiceDetailActions({
   onCancelInvoice,
   onPayInvoice,
   onShowQR,
+  onMarkReceived,
 }: InvoiceDetailActionsProps) {
   const { toast } = useToast()
   const [hasCopied, setHasCopied] = React.useState(false)
+  const [isMarkingReceived, setIsMarkingReceived] = React.useState(false)
   const canShare = React.useSyncExternalStore(subscribe, getShareSnapshot, getServerShareSnapshot)
+
+  const handleMarkReceived = React.useCallback(async () => {
+    const targetId = invoiceId || invoice?.id
+    if (!targetId) return
+
+    setIsMarkingReceived(true)
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(targetId)}/mark-received`, {
+        method: "POST",
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        toast({
+          title: "Payment Received",
+          description: "Invoice status updated to Paid.",
+          type: "success",
+        })
+        if (onMarkReceived) onMarkReceived()
+        if (typeof window !== "undefined") {
+          window.location.reload()
+        }
+      } else {
+        toast({
+          title: "Action Failed",
+          description: data.error || "Unable to mark invoice as paid.",
+          type: "error",
+        })
+      }
+    } catch {
+      toast({
+        title: "Network Error",
+        description: "Please check network connection and try again.",
+        type: "error",
+      })
+    } finally {
+      setIsMarkingReceived(false)
+    }
+  }, [invoice, invoiceId, onMarkReceived, toast])
 
   const handleCopyLink = React.useCallback(async () => {
     if (typeof window === "undefined") return
@@ -128,6 +169,27 @@ export function InvoiceDetailActions({
       className="flex flex-wrap items-center gap-2 print:hidden"
       id="invoice-detail-actions-group"
     >
+      {/* 0.02. Mark Received Action (for merchant creator when invoice is open/overdue) */}
+      {isEditable && (status === "open" || status === "overdue") && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleMarkReceived}
+          disabled={isMarkingReceived}
+          className="h-8 sm:h-9 px-3 text-xs font-semibold gap-1.5 border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 shadow-xs cursor-pointer"
+          title="Mark invoice as paid when payment is received in wallet"
+          aria-label="I Received Payment"
+          id="mark-received-invoice-button"
+        >
+          {isMarkingReceived ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-700" />
+          ) : (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+          )}
+          <span>I Received</span>
+        </Button>
+      )}
+
       {/* 0. Pay Invoice Web3 Action (for open or overdue invoices) */}
       {onPayInvoice && (status === "open" || status === "overdue") && (
         <Button

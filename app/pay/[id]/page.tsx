@@ -158,35 +158,10 @@ export default function PublicPayPage() {
     setIsLoading(false)
   }, [id, searchParams])
 
+  // Fetch invoice status on mount
   React.useEffect(() => {
     fetchInvoice()
   }, [fetchInvoice])
-
-  // Real-time background auto-verification polling (checks for on-chain incoming funds)
-  React.useEffect(() => {
-    if (!invoice || invoice.status === "paid") return
-
-    const pollTimer = setInterval(async () => {
-      try {
-        const cleanId = invoice.id || invoice.invoiceNumber
-        const res = await fetch(`/api/invoices/${encodeURIComponent(cleanId)}/verify-onchain`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.isPaid || data.status === "paid") {
-            setInvoice(data.invoice || { ...invoice, status: "paid" })
-          }
-        }
-      } catch {
-        // Silently retry in background
-      }
-    }, 3500)
-
-    return () => clearInterval(pollTimer)
-  }, [invoice])
 
   const copyToClipboard = (text: string, fieldId: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {

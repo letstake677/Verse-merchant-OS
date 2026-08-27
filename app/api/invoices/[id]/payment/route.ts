@@ -38,6 +38,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await req.json().catch(() => ({}))
     const { txHash, token, chainId, payerAddress, recipientAddress } = body
 
+    if (!txHash || typeof txHash !== "string" || !/^0x([A-Fa-f0-9]{64})$/.test(txHash.trim())) {
+      return NextResponse.json({ ok: false, error: "A valid on-chain transaction hash (0x...) is required" }, { status: 400 })
+    }
+
+    const cleanTxHash = txHash.trim()
+
+    // Check if this transaction hash has already been used
+    const existingTx = await PaymentRepository.findByTransactionHashGlobal(cleanTxHash)
+    if (existingTx && existingTx.invoiceId !== invoice.id) {
+      return NextResponse.json({ ok: false, error: "This transaction hash has already been used for another invoice." }, { status: 400 })
+    }
+
     const numericTotal = parseFloat(invoice.total || "0")
     const prices = await getLiveCryptoPrices()
     const calc = calculateTokenAmount(numericTotal, invoice.currency || "USD", token?.symbol || "USDC", prices)
@@ -60,7 +72,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       currency: invoice.currency,
       payerAddress: payerAddress ? toChecksumAddress(payerAddress) : "0x0000000000000000000000000000000000000000",
       recipientAddress: finalRecipient ? toChecksumAddress(finalRecipient) : "",
-      transactionHash: txHash || `0x${Math.random().toString(16).substring(2)}`
+      transactionHash: cleanTxHash
     })
     
     // Mark invoice as paid
