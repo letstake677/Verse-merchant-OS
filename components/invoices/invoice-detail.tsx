@@ -19,18 +19,41 @@ import {
   RefreshCw,
 } from "lucide-react"
 
+import { InvoiceDetailHeader } from "./invoice-detail-header"
+import { InvoiceDetailCustomer } from "./invoice-detail-customer"
+import { InvoiceDetailSummary } from "./invoice-detail-summary"
+import { InvoiceDetailItems } from "./invoice-detail-items"
+import { InvoiceDetailNotes } from "./invoice-detail-notes"
+import { InvoicePaymentModal } from "./invoice-payment-modal"
+import { PaymentQrModal } from "../payments/payment-qr-modal"
+import { useToast } from "@/components/ui/toast"
+
 interface InvoiceDetailProps {
   invoice: Invoice
-  isOpen: boolean
-  onClose: () => void
-  onPay: () => void
-  onQr: () => void
+  isOpen?: boolean
+  onClose?: () => void
+  onPay?: () => void
+  onQr?: () => void
+  onInvoiceUpdated?: (updated: Invoice) => void
 }
 
-export function InvoiceDetail({ invoice, isOpen, onClose, onPay, onQr }: InvoiceDetailProps) {
+export function InvoiceDetail({
+  invoice,
+  isOpen,
+  onClose,
+  onPay,
+  onQr,
+  onInvoiceUpdated,
+}: InvoiceDetailProps) {
   const [copied, setCopied] = React.useState(false)
   const { prices, calculateAmount, refreshPrices, isCalculating } = useCryptoPrices()
   const isPaid = invoice.status === "paid"
+
+  // States for modals in full page mode
+  const [isPayOpen, setIsPayOpen] = React.useState(false)
+  const [isQrOpen, setIsQrOpen] = React.useState(false)
+  const [isCancelling, setIsCancelling] = React.useState(false)
+  const { toast } = useToast()
 
   const numericTotal = parseFloat(invoice.total || "0")
   const polCalc = calculateAmount(numericTotal, invoice.currency || "USD", "POL")
@@ -44,6 +67,124 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onPay, onQr }: Invoice
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Full page cancel handler
+  const handleCancelInvoice = async () => {
+    if (isCancelling) return
+    setIsCancelling(true)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/cancel`, {
+        method: "POST",
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        toast({
+          title: "Invoice Cancelled",
+          description: "The invoice status has been successfully set to cancelled.",
+          type: "success",
+        })
+        if (onInvoiceUpdated && data.invoice) {
+          onInvoiceUpdated(data.invoice)
+        }
+      } else {
+        toast({
+          title: "Cancellation Failed",
+          description: data.message || "Could not cancel the invoice.",
+          type: "error",
+        })
+      }
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while cancelling.",
+        type: "error",
+      })
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
+  const isModal = isOpen !== undefined
+
+  // --- FULL PAGE MODE ---
+  if (!isModal) {
+    return (
+      <div className="space-y-6" id="invoice-detail-page-wrapper">
+        {/* Header containing all actions: Pay, QR, Edit, Cancel, Print, Copy Link, Share */}
+        <InvoiceDetailHeader
+          invoiceNumber={invoice.invoiceNumber}
+          status={invoice.status as any}
+          onCancelInvoice={
+            invoice.status === "draft" || invoice.status === "open" || invoice.status === "overdue"
+              ? handleCancelInvoice
+              : undefined
+          }
+          onPayInvoice={invoice.status === "open" || invoice.status === "overdue" ? () => setIsPayOpen(true) : undefined}
+          onShowQR={() => setIsQrOpen(true)}
+        />
+
+        {/* 2-Column Desktop Grid, 1-Column Mobile Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          {/* Main left content */}
+          <div className="lg:col-span-2 space-y-6">
+            <InvoiceDetailItems
+              items={invoice.items as any}
+              subtotal={invoice.subtotal}
+              taxAmount={invoice.tax}
+              total={invoice.total}
+              currency={invoice.currency}
+            />
+            {invoice.notes && <InvoiceDetailNotes notes={invoice.notes} />}
+          </div>
+
+          {/* Sidebar right content */}
+          <div className="space-y-6">
+            <InvoiceDetailSummary
+              invoiceId={invoice.id}
+              invoiceNumber={invoice.invoiceNumber}
+              status={invoice.status as any}
+              currency={invoice.currency}
+              createdAt={invoice.createdAt}
+              dueDate={invoice.dueDate}
+              paymentId={invoice.paymentId}
+            />
+            <InvoiceDetailCustomer
+              customerName={invoice.customerName}
+              customerEmail={invoice.customerEmail}
+            />
+          </div>
+        </div>
+
+        {/* Dynamic Modals in Full Page Mode */}
+        <InvoicePaymentModal
+          invoice={invoice}
+          isOpen={isPayOpen}
+          onClose={() => setIsPayOpen(false)}
+          onSuccess={(updatedInvoice) => {
+            setIsPayOpen(false)
+            if (onInvoiceUpdated && updatedInvoice) {
+              onInvoiceUpdated(updatedInvoice)
+            } else if (onInvoiceUpdated) {
+              // Refresh invoice from API
+              fetch(`/api/invoices/${invoice.id}`)
+                .then((res) => (res.ok ? res.json() : null))
+                .then((data) => {
+                  if (data && data.ok && data.invoice) {
+                    onInvoiceUpdated(data.invoice)
+                  }
+                })
+            }
+          }}
+        />
+        <PaymentQrModal
+          invoice={invoice}
+          isOpen={isQrOpen}
+          onClose={() => setIsQrOpen(false)}
+        />
+      </div>
+    )
+  }
+
+  // --- MODAL MODE ---
   if (!isOpen) return null
 
   return (
@@ -98,7 +239,7 @@ export function InvoiceDetail({ invoice, isOpen, onClose, onPay, onQr }: Invoice
                 className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:text-purple-700 font-medium"
               >
                 <RefreshCw className={`w-3 h-3 ${isCalculating ? "animate-spin" : ""}`} />
-                <span>{isCalculating ? "Calculating..." : "Real-time Polygon Market Feed"}</span>
+                <span>{isCalculating ? "Calculating..." : "Live Market Feed"}</span>
               </button>
             </div>
             <div className="grid grid-cols-3 gap-3">
