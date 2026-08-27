@@ -1,18 +1,29 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getInvoiceById, saveInvoice } from "@/lib/invoices/data"
+import { InvoiceRepository } from "@/lib/repositories/invoice-repository"
+import { PaymentRepository } from "@/lib/repositories/payment-repository"
 import { getLiveCryptoPrices, calculateTokenAmount } from "@/lib/payments/prices"
-import { InvoicePayment } from "@/lib/invoices/types"
+import { getAuthenticatedSession } from "@/lib/auth/session"
 
 export const dynamic = "force-dynamic"
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const invoice = getInvoiceById(id)
-  if (!invoice) {
-    return NextResponse.json({ ok: false, error: "Invoice not found" }, { status: 404 })
-  }
-
   try {
+    const session = await getAuthenticatedSession()
+    if (!session) {
+      return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id } = await params
+    
+    let invoice = await InvoiceRepository.findByIdForMerchant(session.merchantId, id)
+    if (!invoice) {
+      invoice = await InvoiceRepository.findByMerchantIdAndInvoiceNumber(session.merchantId, id)
+    }
+
+    if (!invoice) {
+      return NextResponse.json({ ok: false, error: "Invoice not found" }, { status: 404 })
+    }
+
     const body = await req.json()
     const { txHash, token, chainId, payerAddress, recipientAddress } = body
 
@@ -20,35 +31,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const prices = await getLiveCryptoPrices()
     const calc = calculateTokenAmount(numericTotal, invoice.currency || "USD", token?.symbol || "USDC", prices)
 
-    const payment: InvoicePayment = {
-      id: `pay-${Date.now()}`,
-      txHash: txHash || `0x${Math.random().toString(16).substring(2)}`,
-      amount: calc.tokenAmount,
-      cryptoAmount: `${calc.tokenAmount} ${token?.symbol || "USDC"}`,
-      currency: invoice.currency,
+    // Save payment securely to MongoDB
+    const payment = await PaymentRepository.createPayment({
+      merchantId: session.merchantId,
+      invoiceId: invoice.id,
+      status: "confirmed",
+      chainId: chainId || 137,
       token: {
         symbol: token?.symbol || "USDC",
         address: token?.address || "0x0000000000000000000000000000000000000000",
         decimals: token?.decimals || 18,
         isNative: token?.isNative ?? false,
       },
-      chainId: chainId || 137,
+      amount: calc.tokenAmount,
+      currency: invoice.currency,
       payerAddress: payerAddress || "0x0000000000000000000000000000000000000000",
       recipientAddress: recipientAddress || invoice.paymentAddress,
-      status: "confirmed",
-      confirmations: 2,
-      timestamp: Date.now(),
-    }
+      transactionHash: txHash || `0x${Math.random().toString(16).substring(2)}`
+    })
+    
+    // Mark invoice as paid
+    const updatedInvoice = await InvoiceRepository.markInvoicePaid(
+      invoice.id, 
+      session.merchantId, 
+      payment.id
+    )
 
-    const currentPayments = invoice.payments || []
-    const updatedInvoice = {
-      ...invoice,
-      status: "paid" as const,
-      paidAt: new Date().toISOString(),
-      payments: [...currentPayments, payment],
+    if (!updatedInvoice) {
+      return NextResponse.json({ ok: false, error: "Could not update invoice status" }, { status: 400 })
     }
-
-    saveInvoice(updatedInvoice)
 
     return NextResponse.json({
       ok: true,
@@ -60,6 +71,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     })
   } catch (err) {
+    console.error("POST /api/invoices/[id]/payment error:", err)
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 400 })
   }
 }
