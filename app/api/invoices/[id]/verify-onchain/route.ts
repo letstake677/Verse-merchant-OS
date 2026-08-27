@@ -227,7 +227,137 @@ export async function POST(
       })
     }
 
-    // Case 2: No txHash provided (Status Check / Polling)
+    // Case 2: No txHash provided (Automated On-Chain Blockchain Log Scanning)
+    if (merchantWalletAddress && merchantWalletAddress.startsWith("0x") && merchantWalletAddress.length === 42) {
+      try {
+        const checksumRecipient = toChecksumAddress(merchantWalletAddress)
+        const transferEvent = parseAbiItem(
+          "event Transfer(address indexed from, address indexed to, uint256 value)"
+        )
+
+        for (const rpc of POLYGON_RPCS) {
+          try {
+            const client = createPublicClient({
+              chain: polygon,
+              transport: http(process.env.POLYGON_RPC_URL || rpc, { timeout: 6000 }),
+            })
+
+            const latestBlock = await client.getBlockNumber()
+            const fromBlock = latestBlock > 2000n ? latestBlock - 2000n : 0n
+
+            const logs = await client.getLogs({
+              event: transferEvent,
+              args: {
+                to: checksumRecipient as `0x${string}`,
+              },
+              fromBlock,
+            })
+
+            if (logs && logs.length > 0) {
+              const sortedLogs = [...logs].reverse()
+
+              for (const log of sortedLogs) {
+                if (log.transactionHash) {
+                  const receipt = await client.getTransactionReceipt({ hash: log.transactionHash })
+                  if (receipt && receipt.status === "success") {
+                    const payerAddress = receipt.from?.toLowerCase() || undefined
+                    const blockNumber = Number(receipt.blockNumber)
+
+                    let detectedSymbol = "USDC"
+                    const tokenContract = log.address.toLowerCase()
+                    if (tokenContract === "0xc708d6f2153933daa50b2d0758955be0a93a8fec") {
+                      detectedSymbol = "VERSE"
+                    } else if (tokenContract === "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359") {
+                      detectedSymbol = "USDC"
+                    }
+
+                    const paymentToken = resolvePaymentToken(detectedSymbol, chainId) || {
+                      symbol: detectedSymbol,
+                      name: detectedSymbol,
+                      address: log.address,
+                      isNative: false,
+                      decimals: detectedSymbol === "USDC" ? 6 : 18,
+                      chainId,
+                      color: "purple",
+                    }
+
+                    const existingPayment = await PaymentRepository.findActivePaymentForInvoice(
+                      invoice.id,
+                      invoice.merchantId
+                    )
+
+                    let confirmedPayment
+                    if (existingPayment) {
+                      confirmedPayment = await PaymentRepository.updatePaymentStatus(
+                        existingPayment.id,
+                        invoice.merchantId,
+                        {
+                          status: "confirmed",
+                          transactionHash: log.transactionHash,
+                          blockNumber,
+                          payerAddress,
+                        }
+                      )
+                    } else {
+                      const newPayment = await PaymentRepository.createPayment({
+                        merchantId: invoice.merchantId,
+                        invoiceId: invoice.id,
+                        amount: invoice.total,
+                        currency: invoice.currency,
+                        token: paymentToken,
+                        chainId,
+                        recipientAddress: merchantWalletAddress,
+                        reference: `INV-${invoice.invoiceNumber}`,
+                      })
+                      confirmedPayment = await PaymentRepository.updatePaymentStatus(
+                        newPayment.id,
+                        invoice.merchantId,
+                        {
+                          status: "confirmed",
+                          transactionHash: log.transactionHash,
+                          blockNumber,
+                          payerAddress,
+                        }
+                      )
+                    }
+
+                    const updatedInvoice = await InvoiceRepository.markInvoicePaid(
+                      invoice.id,
+                      invoice.merchantId,
+                      confirmedPayment?.id
+                    )
+
+                    AppLogger.auditPayment("onchain_autoscan_confirmed", {
+                      invoiceId: invoice.id,
+                      merchantId: invoice.merchantId,
+                      txHash: log.transactionHash,
+                      amount: invoice.total,
+                      token: detectedSymbol,
+                    })
+
+                    return NextResponse.json({
+                      ok: true,
+                      isPaid: true,
+                      status: "paid",
+                      message: "Auto-detected incoming payment on Polygon!",
+                      invoice: updatedInvoice || { ...invoice, status: "paid" },
+                      payment: confirmedPayment,
+                      txHash: log.transactionHash,
+                    })
+                  }
+                }
+              }
+            }
+            break
+          } catch {
+            // Try next RPC
+          }
+        }
+      } catch (scanErr) {
+        console.error("[verify-onchain] Auto-scan error:", scanErr)
+      }
+    }
+
     const currentPayment = await PaymentRepository.findActivePaymentForInvoice(
       invoice.id,
       invoice.merchantId

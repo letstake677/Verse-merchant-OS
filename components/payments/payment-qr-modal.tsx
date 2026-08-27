@@ -50,6 +50,9 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
   const [qrType, setQrType] = React.useState<"eip681" | "address" | "link">("eip681")
   const [copied, setCopied] = React.useState<boolean>(false)
   const [isDetectedPaid, setIsDetectedPaid] = React.useState<boolean>(invoice.status === "paid")
+  const [manualTxHash, setManualTxHash] = React.useState<string>("")
+  const [isVerifyingTx, setIsVerifyingTx] = React.useState<boolean>(false)
+  const [txError, setTxError] = React.useState<string | null>(null)
 
   const { calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
 
@@ -62,7 +65,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
         const res = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ tokenSymbol: selectedSymbol }),
         })
         if (res.ok) {
           const data = await res.json()
@@ -74,10 +77,49 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
       } catch {
         // Continue polling
       }
-    }, 4000)
+    }, 3000)
 
     return () => clearInterval(interval)
-  }, [isOpen, invoice.id, isDetectedPaid, onPaid])
+  }, [isOpen, invoice.id, isDetectedPaid, onPaid, selectedSymbol])
+
+  const handleManualVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!manualTxHash.trim()) {
+      setTxError("Please enter a transaction hash.")
+      return
+    }
+    const cleanHash = manualTxHash.trim()
+    if (!/^0x[a-fA-F0-9]{64}$/.test(cleanHash)) {
+      setTxError("Invalid transaction hash format (must start with 0x and be 66 characters long).")
+      return
+    }
+
+    setIsVerifyingTx(true)
+    setTxError(null)
+
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionHash: cleanHash,
+          tokenSymbol: selectedSymbol,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.ok && (data.isPaid || data.status === "paid")) {
+        setIsDetectedPaid(true)
+        if (onPaid) onPaid()
+      } else {
+        setTxError(data.message || "Could not verify transaction on Polygon. Please check the hash.")
+      }
+    } catch {
+      setTxError("Network error while verifying transaction.")
+    } finally {
+      setIsVerifyingTx(false)
+    }
+  }
 
   const availableTokens = SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []
 
@@ -317,6 +359,34 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
               </button>
             </div>
           </div>
+
+          {/* Manual Transaction Verification Form */}
+          <form onSubmit={handleManualVerify} className="p-3 bg-purple-50/60 rounded-xl border border-purple-100 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-purple-950 flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-purple-600" />
+                <span>Verify Payment by Tx Hash</span>
+              </label>
+              <span className="text-[10px] text-purple-600 font-medium">Auto-scans every 3s</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={manualTxHash}
+                onChange={(e) => setManualTxHash(e.target.value)}
+                placeholder="Paste Polygon transaction hash (0x...)"
+                className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
+              />
+              <button
+                type="submit"
+                disabled={isVerifyingTx}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              >
+                {isVerifyingTx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify"}
+              </button>
+            </div>
+            {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
+          </form>
 
           {/* Action Buttons */}
           <div className="pt-2 border-t border-slate-100 flex items-center gap-3">
