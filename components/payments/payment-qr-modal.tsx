@@ -360,33 +360,71 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
             </div>
           </div>
 
-          {/* Manual Transaction Verification Form */}
-          <form onSubmit={handleManualVerify} className="p-3 bg-purple-50/60 rounded-xl border border-purple-100 space-y-2">
+          {/* Manual Transaction Verification Form & Auto Check Button */}
+          <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-100 space-y-2.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-purple-950 flex items-center gap-1.5">
-                <RefreshCw className="w-3.5 h-3.5 text-purple-600" />
-                <span>Verify Payment by Tx Hash</span>
-              </label>
-              <span className="text-[10px] text-purple-600 font-medium">Auto-scans every 3s</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={manualTxHash}
-                onChange={(e) => setManualTxHash(e.target.value)}
-                placeholder="Paste Polygon transaction hash (0x...)"
-                className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
-              />
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-600"></span>
+                </span>
+                <span className="text-xs font-semibold text-purple-950">Auto-scanning Polygon network</span>
+              </div>
               <button
-                type="submit"
+                type="button"
+                onClick={async () => {
+                  setIsVerifyingTx(true)
+                  setTxError(null)
+                  try {
+                    const res = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ tokenSymbol: selectedSymbol }),
+                    })
+                    const data = await res.json()
+                    if (data.isPaid || data.status === "paid") {
+                      setIsDetectedPaid(true)
+                      if (onPaid) onPaid()
+                    } else {
+                      setTxError("No new transaction detected for this invoice yet. If you completed payment, paste your Tx Hash below.")
+                    }
+                  } catch {
+                    setTxError("Verification check failed. Please check network connection.")
+                  } finally {
+                    setIsVerifyingTx(false)
+                  }
+                }}
                 disabled={isVerifyingTx}
-                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-100 hover:bg-purple-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1"
               >
-                {isVerifyingTx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify"}
+                {isVerifyingTx ? <Loader2 className="w-3 h-3 animate-spin text-purple-700" /> : <RefreshCw className="w-3 h-3 text-purple-700" />}
+                <span>Check Now</span>
               </button>
             </div>
-            {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
-          </form>
+
+            <form onSubmit={handleManualVerify} className="space-y-1.5 pt-1 border-t border-purple-100">
+              <label className="text-[11px] font-medium text-slate-600 block">
+                Optionally paste Tx Hash if auto-detect is delayed:
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={manualTxHash}
+                  onChange={(e) => setManualTxHash(e.target.value)}
+                  placeholder="Polygon transaction hash (0x...)"
+                  className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
+                />
+                <button
+                  type="submit"
+                  disabled={isVerifyingTx}
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 shadow-xs"
+                >
+                  {isVerifyingTx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify Hash"}
+                </button>
+              </div>
+              {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
+            </form>
+          </div>
 
           {/* Action Buttons */}
           <div className="pt-2 border-t border-slate-100 flex items-center gap-3">

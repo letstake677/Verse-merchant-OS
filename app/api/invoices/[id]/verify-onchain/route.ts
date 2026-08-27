@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createPublicClient, http, parseAbiItem, decodeEventLog } from "viem"
+import { createPublicClient, http, parseAbiItem } from "viem"
 import { polygon } from "viem/chains"
 import { ObjectId } from "mongodb"
 import { getDb } from "@/lib/db/mongodb"
@@ -9,6 +9,7 @@ import {
   POLYGON_MAINNET_CHAIN_ID,
   resolvePaymentToken,
   toChecksumAddress,
+  MERCHANT_RECEIVING_ADDRESS,
 } from "@/lib/payments/config"
 import { AppLogger } from "@/lib/observability/logger"
 
@@ -21,18 +22,17 @@ const POLYGON_RPCS = [
   "https://polygon.llamarpc.com",
 ]
 
-function getViemClient(_chainId?: number) {
-  // Primary Polygon Mainnet RPC client
-  return createPublicClient({
-    chain: polygon,
-    transport: http(process.env.POLYGON_RPC_URL || POLYGON_RPCS[0]),
-  })
-}
+// Known token contract addresses on Polygon Mainnet
+const KNOWN_TOKEN_CONTRACTS = [
+  "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // Native USDC
+  "0xc708D6F2153933DAA50B2D0758955Be0A93A8FEc", // Verse Token
+  "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // Bridged USDC.e
+] as const
 
 /**
  * POST /api/invoices/[id]/verify-onchain
  *
- * Verifies an on-chain transaction hash for an invoice on Polygon PoS (or Amoy),
+ * Verifies an on-chain transaction hash for an invoice on Polygon PoS,
  * updates database status to 'paid', logs payment records, and returns updated invoice.
  *
  * Body: { transactionHash?: string, chainId?: number, tokenSymbol?: string }
@@ -112,11 +112,13 @@ export async function POST(
         merchantWalletAddress = merchantDoc.walletAddress.toLowerCase()
       }
     }
+    if (!merchantWalletAddress || merchantWalletAddress === "0x0000000000000000000000000000000000000000") {
+      merchantWalletAddress = MERCHANT_RECEIVING_ADDRESS
+    }
 
-    // Case 1: Transaction Hash provided -> Verify on-chain with Viem
+    // Case 1: Explicit Transaction Hash provided -> Verify on-chain with Viem
     if (txHash && /^0x([A-Fa-f0-9]{64})$/.test(txHash)) {
       let receipt: any = null
-      let lastError: any = null
 
       for (const rpc of POLYGON_RPCS) {
         try {
@@ -128,8 +130,8 @@ export async function POST(
             hash: txHash as `0x${string}`,
           })
           if (receipt) break
-        } catch (e) {
-          lastError = e
+        } catch {
+          // Try next RPC
         }
       }
 
@@ -147,19 +149,19 @@ export async function POST(
         )
       }
 
-      const payerAddress = receipt.from?.toLowerCase() || null
+      const payerAddress = receipt.from?.toLowerCase() || undefined
       const blockNumber = Number(receipt.blockNumber)
+
       const paymentToken = resolvePaymentToken(tokenSymbol, chainId) || {
         symbol: tokenSymbol,
         name: tokenSymbol,
         address: "0x0000000000000000000000000000000000000000",
-        isNative: tokenSymbol === "POL",
+        isNative: false,
         decimals: tokenSymbol === "USDC" ? 6 : 18,
         chainId,
         color: "purple",
       }
 
-      // Record or Confirm Payment Record
       const existingPayment = await PaymentRepository.findActivePaymentForInvoice(
         invoice.id,
         invoice.merchantId
@@ -174,7 +176,7 @@ export async function POST(
             status: "confirmed",
             transactionHash: txHash,
             blockNumber,
-            payerAddress: payerAddress || undefined,
+            payerAddress,
           }
         )
       } else {
@@ -185,10 +187,9 @@ export async function POST(
           currency: invoice.currency,
           token: paymentToken,
           chainId,
-          recipientAddress: merchantWalletAddress || receipt.to || "",
+          recipientAddress: merchantWalletAddress,
           reference: `INV-${invoice.invoiceNumber}`,
         })
-
         confirmedPayment = await PaymentRepository.updatePaymentStatus(
           newPayment.id,
           invoice.merchantId,
@@ -196,12 +197,11 @@ export async function POST(
             status: "confirmed",
             transactionHash: txHash,
             blockNumber,
-            payerAddress: payerAddress || undefined,
+            payerAddress,
           }
         )
       }
 
-      // 1. Mark Invoice as PAID in Database
       const updatedInvoice = await InvoiceRepository.markInvoicePaid(
         invoice.id,
         invoice.merchantId,
@@ -227,73 +227,97 @@ export async function POST(
       })
     }
 
-    // Case 2: No txHash provided (Automated On-Chain Blockchain Log Scanning)
+    // Case 2: No txHash provided -> Automated Multi-Indexer On-Chain Scan
     if (merchantWalletAddress && merchantWalletAddress.startsWith("0x") && merchantWalletAddress.length === 42) {
       try {
         const checksumRecipient = toChecksumAddress(merchantWalletAddress)
         const lowerRecipient = checksumRecipient.toLowerCase()
 
-        // 1. First attempt: Blockscout / Polygonscan API for instant zero-RPC-limit lookup
         let detectedTxHash: string | null = null
         let detectedPayer: string | null = null
         let detectedBlock: number | null = null
         let detectedTokenSymbol = tokenSymbol || "USDC"
 
+        // 1. Blockscout V2 API - Token Transfers
         try {
-          // Polygonscan tokentx
-          const psRes = await fetch(
-            `https://api.polygonscan.com/api?module=account&action=tokentx&address=${checksumRecipient}&sort=desc&page=1&offset=5`,
-            { signal: AbortSignal.timeout(3000) }
+          const bsRes = await fetch(
+            `https://polygon.blockscout.com/api/v2/addresses/${checksumRecipient}/token-transfers`,
+            { signal: AbortSignal.timeout(3500) }
           )
-          if (psRes.ok) {
-            const psData = await psRes.json()
-            if (psData && psData.status === "1" && Array.isArray(psData.result)) {
-              for (const tx of psData.result) {
-                if (tx.to && tx.to.toLowerCase() === lowerRecipient && tx.hash) {
-                  detectedTxHash = tx.hash
-                  detectedPayer = tx.from
-                  detectedBlock = parseInt(tx.blockNumber, 10) || null
-                  if (tx.tokenSymbol) detectedTokenSymbol = tx.tokenSymbol.toUpperCase()
-                  break
-                }
+          if (bsRes.ok) {
+            const bsData = await bsRes.json()
+            const items = Array.isArray(bsData?.items) ? bsData.items : []
+            for (const item of items) {
+              const toHash = (item.to?.hash || item.to || item.to_address_hash || "").toString().toLowerCase()
+              const hash = item.tx_hash || item.transaction_hash || item.hash
+              if (toHash === lowerRecipient && hash) {
+                detectedTxHash = hash
+                detectedPayer = item.from?.hash || item.from
+                detectedBlock = item.block_number || null
+                if (item.token?.symbol) detectedTokenSymbol = item.token.symbol.toUpperCase()
+                break
               }
             }
           }
         } catch {
-          // Fallback to RPC log scanning
+          // Fallback to next source
         }
 
-        // If Polygonscan didn't find recent tokentx, check Blockscout V2
+        // 2. Blockscout V2 API - Native POL/MATIC Transactions
         if (!detectedTxHash) {
           try {
-            const bsRes = await fetch(
-              `https://polygon.blockscout.com/api/v2/addresses/${checksumRecipient}/token-transfers`,
-              { signal: AbortSignal.timeout(3000) }
+            const bsTxRes = await fetch(
+              `https://polygon.blockscout.com/api/v2/addresses/${checksumRecipient}/transactions`,
+              { signal: AbortSignal.timeout(3500) }
             )
-            if (bsRes.ok) {
-              const bsData = await bsRes.json()
-              if (bsData && Array.isArray(bsData.items)) {
-                for (const item of bsData.items) {
-                  if (item.to?.hash?.toLowerCase() === lowerRecipient && item.tx_hash) {
-                    detectedTxHash = item.tx_hash
-                    detectedPayer = item.from?.hash
-                    detectedBlock = item.block_number || null
-                    if (item.token?.symbol) detectedTokenSymbol = item.token.symbol.toUpperCase()
+            if (bsTxRes.ok) {
+              const bsTxData = await bsTxRes.json()
+              const items = Array.isArray(bsTxData?.items) ? bsTxData.items : []
+              for (const item of items) {
+                const toHash = (item.to?.hash || item.to || "").toString().toLowerCase()
+                const hash = item.hash || item.tx_hash
+                if (toHash === lowerRecipient && hash && item.value && item.value !== "0") {
+                  detectedTxHash = hash
+                  detectedPayer = item.from?.hash || item.from
+                  detectedBlock = item.block_number || null
+                  detectedTokenSymbol = "POL"
+                  break
+                }
+              }
+            }
+          } catch {
+            // Fallback to next source
+          }
+        }
+
+        // 3. Polygonscan Public API (Tokentx + TxList)
+        if (!detectedTxHash) {
+          try {
+            const psRes = await fetch(
+              `https://api.polygonscan.com/api?module=account&action=tokentx&address=${checksumRecipient}&sort=desc&page=1&offset=10`,
+              { signal: AbortSignal.timeout(3500) }
+            )
+            if (psRes.ok) {
+              const psData = await psRes.json()
+              if (psData && psData.status === "1" && Array.isArray(psData.result)) {
+                for (const tx of psData.result) {
+                  if (tx.to && tx.to.toLowerCase() === lowerRecipient && tx.hash) {
+                    detectedTxHash = tx.hash
+                    detectedPayer = tx.from
+                    detectedBlock = parseInt(tx.blockNumber, 10) || null
+                    if (tx.tokenSymbol) detectedTokenSymbol = tx.tokenSymbol.toUpperCase()
                     break
                   }
                 }
               }
             }
           } catch {
-            // Continue to RPC logs
+            // Fallback to next source
           }
         }
 
-        // If APIs returned a txHash, confirm receipt and finish
-        if (detectedTxHash) {
-          txHash = detectedTxHash
-        } else {
-          // 2. Viem getLogs with safe 200-block range (prevents RPC block range limit errors)
+        // 4. Viem RPC getLogs with Indexed Token Contracts Filter
+        if (!detectedTxHash) {
           const transferEvent = parseAbiItem(
             "event Transfer(address indexed from, address indexed to, uint256 value)"
           )
@@ -306,10 +330,10 @@ export async function POST(
               })
 
               const latestBlock = await client.getBlockNumber()
-              // Use safe small 200 block window (~6 minutes on Polygon) to prevent 429/range errors
-              const fromBlock = latestBlock > 200n ? latestBlock - 200n : 0n
+              const fromBlock = latestBlock > 2000n ? latestBlock - 2000n : 0n
 
               const logs = await client.getLogs({
+                address: [...KNOWN_TOKEN_CONTRACTS] as `0x${string}`[],
                 event: transferEvent,
                 args: {
                   to: checksumRecipient as `0x${string}`,
@@ -330,9 +354,8 @@ export async function POST(
           }
         }
 
-        // If auto-scanner identified a transaction hash
+        // 5. If auto-scanner identified a transaction hash, verify and mark paid
         if (detectedTxHash) {
-          // Verify with Viem client
           for (const rpc of POLYGON_RPCS) {
             try {
               const client = createPublicClient({
