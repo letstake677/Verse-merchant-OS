@@ -3,6 +3,7 @@
 import * as React from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { Invoice } from "@/lib/invoices/types"
+import { generatePayUrl } from "@/lib/invoices/invoice-link"
 import {
   SUPPORTED_PAYMENT_TOKENS,
   MERCHANT_RECEIVING_ADDRESS,
@@ -109,11 +110,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
   }
 
   // Determine actual QR data depending on user preference
-  const targetId = invoice.id || invoice.invoiceNumber
-  const checkoutUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/pay/${targetId}`
-      : `/pay/${targetId}`
+  const checkoutUrl = generatePayUrl(invoice)
 
   let activeQrValue = eip681Uri
   if (qrType === "address") {

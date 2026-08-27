@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Invoice } from "@/lib/invoices/types"
+import { generatePayUrl } from "@/lib/invoices/invoice-link"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import {
   X,
@@ -63,8 +64,7 @@ export function InvoiceDetail({
   const usdcCalc = calculateAmount(numericTotal, invoice.currency || "USD", "USDC")
 
   const handleCopyLink = async () => {
-    const targetId = invoice.id || invoice.invoiceNumber
-    const url = `${window.location.origin}/pay/${targetId}`
+    const url = generatePayUrl(invoice)
     try {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
         await navigator.clipboard.writeText(url)
@@ -96,8 +96,7 @@ export function InvoiceDetail({
   }
 
   const handleShare = () => {
-    const targetId = invoice.id || invoice.invoiceNumber
-    const url = `${window.location.origin}/pay/${targetId}`
+    const url = generatePayUrl(invoice)
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({
         title: `Invoice ${invoice.invoiceNumber}`,

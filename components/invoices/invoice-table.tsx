@@ -13,6 +13,8 @@ interface PaginationInfo {
   totalPages: number
 }
 
+import { generatePayUrl } from "@/lib/invoices/invoice-link"
+
 interface InvoiceTableProps {
   invoices: Invoice[]
   isLoading?: boolean
@@ -43,8 +45,7 @@ export function InvoiceTable({
 
   const handleCopyLink = async (invoice: Invoice, e: React.MouseEvent) => {
     e.stopPropagation()
-    const targetId = invoice.id || invoice.invoiceNumber
-    const payUrl = `${window.location.origin}/pay/${targetId}`
+    const payUrl = generatePayUrl(invoice)
     
     try {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {

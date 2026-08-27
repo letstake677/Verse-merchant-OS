@@ -1,7 +1,9 @@
 import { ObjectId } from "mongodb"
+import * as fs from "fs"
+import * as path from "path"
 
 /**
- * In-Memory MongoDB-compatible Database Layer
+ * In-Memory & Disk-Backed MongoDB-compatible Database Layer
  * Used when MONGODB_URI is not set or when local offline resilience is required.
  * Fully supports CRUD, filtering, projections, sorting, pagination, and basic aggregation.
  */
@@ -10,8 +12,48 @@ declare global {
   var _verseInMemoryStorage: Map<string, Map<string, any>> | undefined
 }
 
+const TMP_FILE_PATH = path.join("/tmp", "verse_db_store.json")
+
+function loadFromDisk(): void {
+  if (typeof window !== "undefined") return
+  try {
+    if (fs.existsSync(TMP_FILE_PATH)) {
+      const raw = fs.readFileSync(TMP_FILE_PATH, "utf-8")
+      const parsed = JSON.parse(raw)
+      for (const [colName, docs] of Object.entries(parsed)) {
+        if (!global._verseInMemoryStorage!.has(colName)) {
+          global._verseInMemoryStorage!.set(colName, new Map<string, any>())
+        }
+        const colMap = global._verseInMemoryStorage!.get(colName)!
+        for (const [docId, docVal] of Object.entries(docs as Record<string, any>)) {
+          colMap.set(docId, docVal)
+        }
+      }
+    }
+  } catch {
+    // Silently ignore disk read errors
+  }
+}
+
+function saveToDisk(): void {
+  if (typeof window !== "undefined") return
+  try {
+    const serialized: Record<string, Record<string, any>> = {}
+    for (const [colName, colMap] of global._verseInMemoryStorage!.entries()) {
+      serialized[colName] = {}
+      for (const [docId, docVal] of colMap.entries()) {
+        serialized[colName][docId] = docVal
+      }
+    }
+    fs.writeFileSync(TMP_FILE_PATH, JSON.stringify(serialized), "utf-8")
+  } catch {
+    // Silently ignore disk write errors
+  }
+}
+
 if (!global._verseInMemoryStorage) {
   global._verseInMemoryStorage = new Map<string, Map<string, any>>()
+  loadFromDisk()
 }
 
 function getStore(collectionName: string): Map<string, any> {
@@ -321,6 +363,7 @@ export class MemoryCollection<T = any> {
     const id = doc._id instanceof ObjectId ? doc._id : new ObjectId()
     const storedDoc = { ...doc, _id: id }
     store.set(id.toString(), storedDoc)
+    saveToDisk()
     return { insertedId: id, acknowledged: true }
   }
 
@@ -332,6 +375,7 @@ export class MemoryCollection<T = any> {
       insertedIds[i] = res.insertedId
       count++
     }
+    saveToDisk()
     return { insertedCount: count, insertedIds, acknowledged: true }
   }
 
@@ -341,6 +385,7 @@ export class MemoryCollection<T = any> {
       if (matchesFilter(doc, filter)) {
         const updated = applyUpdate(doc, update)
         store.set(idStr, updated)
+        saveToDisk()
         return { matchedCount: 1, modifiedCount: 1 }
       }
     }
@@ -352,6 +397,7 @@ export class MemoryCollection<T = any> {
       }
       const updated = applyUpdate(newDoc, update)
       const res = await this.insertOne(updated)
+      saveToDisk()
       return { matchedCount: 0, modifiedCount: 0, upsertedId: res.insertedId }
     }
 
@@ -368,6 +414,9 @@ export class MemoryCollection<T = any> {
         count++
       }
     }
+    if (count > 0) {
+      saveToDisk()
+    }
     return { matchedCount: count, modifiedCount: count }
   }
 
@@ -376,6 +425,7 @@ export class MemoryCollection<T = any> {
     for (const [idStr, doc] of store.entries()) {
       if (matchesFilter(doc, filter)) {
         store.delete(idStr)
+        saveToDisk()
         return { deletedCount: 1 }
       }
     }
@@ -390,6 +440,9 @@ export class MemoryCollection<T = any> {
         store.delete(idStr)
         count++
       }
+    }
+    if (count > 0) {
+      saveToDisk()
     }
     return { deletedCount: count }
   }

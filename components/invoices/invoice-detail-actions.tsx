@@ -5,10 +5,12 @@ import { Printer, Copy, Check, Share2, Edit3, XCircle, Wallet, QrCode } from "lu
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/toast"
 import { InvoiceStatus } from "@/types/invoice"
+import { generatePayUrl } from "@/lib/invoices/invoice-link"
 
 interface InvoiceDetailActionsProps {
   invoiceNumber: string
   invoiceId?: string
+  invoice?: any
   status?: InvoiceStatus
   onEdit?: () => void
   isEditable?: boolean
@@ -32,6 +34,7 @@ function getServerShareSnapshot() {
 export function InvoiceDetailActions({
   invoiceNumber,
   invoiceId,
+  invoice,
   status = "draft",
   onEdit,
   isEditable = true,
@@ -46,7 +49,7 @@ export function InvoiceDetailActions({
   const handleCopyLink = React.useCallback(async () => {
     if (typeof window === "undefined") return
 
-    const payUrl = `${window.location.origin}/pay/${invoiceId || invoiceNumber}`
+    const payUrl = generatePayUrl(invoice || { id: invoiceId, invoiceNumber })
 
     try {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
@@ -76,16 +79,16 @@ export function InvoiceDetailActions({
     } catch {
       toast({
         title: "Unable to copy link",
-        description: `Please copy this link: ${payUrl}`,
+        description: `Please copy this link: ${generatePayUrl(invoice || { id: invoiceId, invoiceNumber })}`,
         type: "error",
       })
     }
-  }, [invoiceId, invoiceNumber, toast])
+  }, [invoice, invoiceId, invoiceNumber, toast])
 
   const handleShare = React.useCallback(async () => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return
 
-    const payUrl = `${window.location.origin}/pay/${invoiceId || invoiceNumber}`
+    const payUrl = generatePayUrl(invoice || { id: invoiceId, invoiceNumber })
 
     if (navigator.share && typeof navigator.share === "function") {
       try {
@@ -106,7 +109,7 @@ export function InvoiceDetailActions({
       // Fallback to copying link when Web Share API is not available
       handleCopyLink()
     }
-  }, [invoiceNumber, invoiceId, handleCopyLink])
+  }, [invoice, invoiceNumber, invoiceId, handleCopyLink])
 
   const handlePrint = React.useCallback(() => {
     if (typeof window === "undefined") return

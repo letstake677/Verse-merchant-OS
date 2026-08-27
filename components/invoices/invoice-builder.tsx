@@ -116,6 +116,16 @@ export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBui
 
       if (res.ok) {
         const data = await res.json()
+        if (typeof window !== "undefined" && data.invoice) {
+          try {
+            if (data.invoice.id) {
+              localStorage.setItem(`verse_invoice_${data.invoice.id}`, JSON.stringify(data.invoice))
+            }
+            if (data.invoice.invoiceNumber) {
+              localStorage.setItem(`verse_invoice_${data.invoice.invoiceNumber}`, JSON.stringify(data.invoice))
+            }
+          } catch {}
+        }
         if (onCreated) {
           onCreated(data.invoice)
         } else {
