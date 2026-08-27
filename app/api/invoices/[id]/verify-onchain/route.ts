@@ -51,7 +51,10 @@ export async function POST(
     }
 
     const cleanId = id.trim()
-    const invoice = await InvoiceRepository.findById(cleanId)
+    let invoice = await InvoiceRepository.findById(cleanId)
+    if (!invoice) {
+      invoice = await InvoiceRepository.findByInvoiceNumber(cleanId)
+    }
 
     if (!invoice) {
       return NextResponse.json(
@@ -85,6 +88,8 @@ export async function POST(
       const body = await req.json()
       if (body && typeof body.transactionHash === "string") {
         txHash = body.transactionHash.trim()
+      } else if (body && typeof body.txHash === "string") {
+        txHash = body.txHash.trim()
       }
       if (body && typeof body.chainId === "number") {
         chainId = body.chainId
@@ -98,8 +103,8 @@ export async function POST(
 
     // Retrieve merchant settlement wallet address
     const db = await getDb()
-    let merchantWalletAddress = ""
-    if (ObjectId.isValid(invoice.merchantId)) {
+    let merchantWalletAddress = invoice.paymentAddress || ""
+    if (!merchantWalletAddress && ObjectId.isValid(invoice.merchantId)) {
       const merchantDoc = await db
         .collection("merchants")
         .findOne({ _id: new ObjectId(invoice.merchantId) })
@@ -110,124 +115,130 @@ export async function POST(
 
     // Case 1: Transaction Hash provided -> Verify on-chain with Viem
     if (txHash && /^0x([A-Fa-f0-9]{64})$/.test(txHash)) {
-      const client = getViemClient(chainId)
+      let receipt: any = null
+      let lastError: any = null
 
-      try {
-        const receipt = await client.getTransactionReceipt({
-          hash: txHash as `0x${string}`,
-        })
-
-        if (!receipt) {
-          return NextResponse.json(
-            { ok: false, message: "Transaction receipt not found on Polygon. It may still be pending." },
-            { status: 400 }
-          )
-        }
-
-        if (receipt.status !== "success") {
-          return NextResponse.json(
-            { ok: false, message: "On-chain transaction execution failed or reverted." },
-            { status: 400 }
-          )
-        }
-
-        const payerAddress = receipt.from?.toLowerCase() || null
-        const blockNumber = Number(receipt.blockNumber)
-        const paymentToken = resolvePaymentToken(tokenSymbol, chainId) || {
-          symbol: tokenSymbol,
-          name: tokenSymbol,
-          isNative: tokenSymbol === "POL",
-          decimals: tokenSymbol === "USDC" ? 6 : 18,
-          chainId,
-        }
-
-        // 1. Mark Invoice as PAID in Database
-        const updatedInvoice = await InvoiceRepository.updateInvoice(
-          invoice.id,
-          invoice.merchantId,
-          {
-            status: "paid",
-          }
-        )
-
-        // 2. Record or Confirm Payment Record
-        const existingPayment = await PaymentRepository.findActivePaymentForInvoice(
-          invoice.id,
-          invoice.merchantId
-        )
-
-        let confirmedPayment
-        if (existingPayment) {
-          confirmedPayment = await PaymentRepository.updatePaymentStatus(
-            existingPayment.id,
-            invoice.merchantId,
-            {
-              status: "confirmed",
-              transactionHash: txHash,
-              blockNumber,
-              payerAddress: payerAddress || undefined,
-            }
-          )
-        } else {
-          const newPayment = await PaymentRepository.createPayment({
-            merchantId: invoice.merchantId,
-            invoiceId: invoice.id,
-            amount: invoice.total,
-            currency: invoice.currency,
-            token: paymentToken,
-            chainId,
-            recipientAddress: merchantWalletAddress || receipt.to || "",
-            reference: `INV-${invoice.invoiceNumber}`,
+      for (const rpc of POLYGON_RPCS) {
+        try {
+          const client = createPublicClient({
+            chain: polygon,
+            transport: http(process.env.POLYGON_RPC_URL || rpc, { timeout: 8000 }),
           })
-
-          confirmedPayment = await PaymentRepository.updatePaymentStatus(
-            newPayment.id,
-            invoice.merchantId,
-            {
-              status: "confirmed",
-              transactionHash: txHash,
-              blockNumber,
-              payerAddress: payerAddress || undefined,
-            }
-          )
+          receipt = await client.getTransactionReceipt({
+            hash: txHash as `0x${string}`,
+          })
+          if (receipt) break
+        } catch (e) {
+          lastError = e
         }
+      }
 
-        AppLogger.auditPayment("onchain_confirmed", {
-          invoiceId: invoice.id,
-          merchantId: invoice.merchantId,
-          txHash,
-          amount: invoice.total,
-          token: tokenSymbol,
-        })
-
-        return NextResponse.json({
-          ok: true,
-          isPaid: true,
-          status: "paid",
-          message: "Transaction verified successfully on Polygon blockchain!",
-          invoice: updatedInvoice || invoice,
-          payment: confirmedPayment,
-          txHash,
-        })
-      } catch (rpcErr) {
-        console.error("[verify-onchain] RPC receipt error:", rpcErr)
+      if (!receipt) {
         return NextResponse.json(
-          {
-            ok: false,
-            message:
-              "Unable to verify transaction on Polygon RPC yet. Please ensure the transaction is mined.",
-          },
+          { ok: false, message: "Transaction receipt not found on Polygon yet. It may still be pending." },
           { status: 400 }
         )
       }
+
+      if (receipt.status !== "success") {
+        return NextResponse.json(
+          { ok: false, message: "On-chain transaction execution failed or reverted." },
+          { status: 400 }
+        )
+      }
+
+      const payerAddress = receipt.from?.toLowerCase() || null
+      const blockNumber = Number(receipt.blockNumber)
+      const paymentToken = resolvePaymentToken(tokenSymbol, chainId) || {
+        symbol: tokenSymbol,
+        name: tokenSymbol,
+        address: "0x0000000000000000000000000000000000000000",
+        isNative: tokenSymbol === "POL",
+        decimals: tokenSymbol === "USDC" ? 6 : 18,
+        chainId,
+        color: "purple",
+      }
+
+      // Record or Confirm Payment Record
+      const existingPayment = await PaymentRepository.findActivePaymentForInvoice(
+        invoice.id,
+        invoice.merchantId
+      )
+
+      let confirmedPayment
+      if (existingPayment) {
+        confirmedPayment = await PaymentRepository.updatePaymentStatus(
+          existingPayment.id,
+          invoice.merchantId,
+          {
+            status: "confirmed",
+            transactionHash: txHash,
+            blockNumber,
+            payerAddress: payerAddress || undefined,
+          }
+        )
+      } else {
+        const newPayment = await PaymentRepository.createPayment({
+          merchantId: invoice.merchantId,
+          invoiceId: invoice.id,
+          amount: invoice.total,
+          currency: invoice.currency,
+          token: paymentToken,
+          chainId,
+          recipientAddress: merchantWalletAddress || receipt.to || "",
+          reference: `INV-${invoice.invoiceNumber}`,
+        })
+
+        confirmedPayment = await PaymentRepository.updatePaymentStatus(
+          newPayment.id,
+          invoice.merchantId,
+          {
+            status: "confirmed",
+            transactionHash: txHash,
+            blockNumber,
+            payerAddress: payerAddress || undefined,
+          }
+        )
+      }
+
+      // 1. Mark Invoice as PAID in Database
+      const updatedInvoice = await InvoiceRepository.markInvoicePaid(
+        invoice.id,
+        invoice.merchantId,
+        confirmedPayment?.id
+      )
+
+      AppLogger.auditPayment("onchain_confirmed", {
+        invoiceId: invoice.id,
+        merchantId: invoice.merchantId,
+        txHash,
+        amount: invoice.total,
+        token: tokenSymbol,
+      })
+
+      return NextResponse.json({
+        ok: true,
+        isPaid: true,
+        status: "paid",
+        message: "Transaction verified successfully on Polygon blockchain!",
+        invoice: updatedInvoice || { ...invoice, status: "paid" },
+        payment: confirmedPayment,
+        txHash,
+      })
     }
 
     // Case 2: No txHash provided (Status Check / Polling)
+    const currentPayment = await PaymentRepository.findActivePaymentForInvoice(
+      invoice.id,
+      invoice.merchantId
+    )
+
     return NextResponse.json({
       ok: true,
       isPaid: invoice.status === "paid",
       status: invoice.status,
       invoice,
+      payment: currentPayment,
     })
   } catch (error) {
     console.error("[POST /api/invoices/[id]/verify-onchain] Error:", error)

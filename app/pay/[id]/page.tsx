@@ -65,6 +65,31 @@ export default function PublicPayPage() {
     fetchInvoice()
   }, [fetchInvoice])
 
+  // Real-time auto-verification polling for background payment detection
+  React.useEffect(() => {
+    if (!invoice || invoice.status === "paid") return
+
+    const pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/invoices/${id}/verify-onchain`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.isPaid || data.status === "paid") {
+            setInvoice(data.invoice || { ...invoice, status: "paid" })
+          }
+        }
+      } catch {
+        // Silently retry
+      }
+    }, 4000)
+
+    return () => clearInterval(pollTimer)
+  }, [id, invoice])
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -137,7 +162,14 @@ export default function PublicPayPage() {
                 </span>
               </div>
               <h1 className="text-2xl md:text-3xl font-bold font-mono">{invoice.invoiceNumber}</h1>
-              <p className="text-sm text-slate-400">Billed to {invoice.customerName}</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-400">
+                <span>Billed to <strong className="text-slate-200">{invoice.customerName}</strong></span>
+                {invoice.paymentAddress && (
+                  <span className="text-xs font-mono bg-slate-800/80 text-purple-300 px-2 py-0.5 rounded-md border border-slate-700">
+                    Recipient: {invoice.paymentAddress.slice(0, 6)}...{invoice.paymentAddress.slice(-4)}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="text-left md:text-right">
@@ -271,6 +303,7 @@ export default function PublicPayPage() {
         invoice={invoice}
         isOpen={isQrOpen}
         onClose={() => setIsQrOpen(false)}
+        onPaid={() => fetchInvoice()}
       />
     </div>
   )

@@ -420,6 +420,7 @@ export class InvoiceRepository {
         total: input.total,
         notes: input.notes,
         dueDate: dueDateObj,
+        paymentAddress: input.paymentAddress || "",
         createdAt: now,
         updatedAt: now,
         paidAt: undefined,
@@ -634,30 +635,36 @@ export class InvoiceRepository {
 
   /**
    * Authoritatively marks an invoice as paid after verified payment confirmation.
-   * Atomically transitions status from open/overdue to paid and sets paidAt and paymentId.
+   * Atomically transitions status to paid and sets paidAt and paymentId.
    */
   static async markInvoicePaid(
     invoiceId: string,
-    merchantId: string,
-    paymentId: string,
+    merchantId?: string,
+    paymentId?: string,
     paidAtDate: Date = new Date()
   ): Promise<Invoice | null> {
-    if (!invoiceId || !merchantId || !paymentId) return null
-    if (!ObjectId.isValid(invoiceId)) return null
+    if (!invoiceId) return null
 
     try {
       const collection = await this.getCollection()
       const now = new Date()
+
+      const query: any = {}
+      if (ObjectId.isValid(invoiceId)) {
+        query._id = new ObjectId(invoiceId)
+      } else {
+        query.invoiceNumber = invoiceId.trim()
+      }
+      if (merchantId) {
+        query.merchantId = merchantId
+      }
+
       const updatedDoc = await collection.findOneAndUpdate(
-        {
-          _id: new ObjectId(invoiceId),
-          merchantId,
-          status: { $in: ["open", "overdue"] as InvoiceStatus[] },
-        },
+        query,
         {
           $set: {
             status: "paid" as InvoiceStatus,
-            paymentId,
+            paymentId: paymentId || undefined,
             paidAt: paidAtDate,
             updatedAt: now,
           },
@@ -670,6 +677,49 @@ export class InvoiceRepository {
     } catch (error) {
       console.error("[InvoiceRepository.markInvoicePaid] Error:", error)
       throw new Error("Failed to mark invoice as paid.")
+    }
+  }
+
+  /**
+   * Universal update invoice method (supporting both merchant and verification callers)
+   */
+  static async updateInvoice(
+    invoiceId: string,
+    merchantId: string,
+    updates: Partial<InvoiceDocument> | { status?: InvoiceStatus; paymentId?: string }
+  ): Promise<Invoice | null> {
+    if (!invoiceId) return null
+
+    try {
+      const collection = await this.getCollection()
+      const now = new Date()
+
+      const query: any = {}
+      if (ObjectId.isValid(invoiceId)) {
+        query._id = new ObjectId(invoiceId)
+      } else {
+        query.invoiceNumber = invoiceId.trim()
+      }
+      if (merchantId) {
+        query.merchantId = merchantId
+      }
+
+      const setObj: any = { ...updates, updatedAt: now }
+      if (updates.status === "paid" && !setObj.paidAt) {
+        setObj.paidAt = now
+      }
+
+      const updatedDoc = await collection.findOneAndUpdate(
+        query,
+        { $set: setObj },
+        { returnDocument: "after" }
+      )
+
+      if (!updatedDoc) return null
+      return serializeInvoiceDocument(updatedDoc)
+    } catch (error) {
+      console.error("[InvoiceRepository.updateInvoice] Error:", error)
+      throw new Error("Failed to update invoice record.")
     }
   }
 

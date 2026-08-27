@@ -34,6 +34,7 @@ export interface InvoiceDocument {
   total: string
   notes?: string
   dueDate?: Date
+  paymentAddress?: string
   createdAt: Date
   updatedAt?: Date
   paidAt?: Date
@@ -64,6 +65,7 @@ export interface CreateInvoiceInput {
   total: string
   notes?: string
   dueDate?: string | Date
+  paymentAddress?: string
   paymentId?: string
 }
 
@@ -167,6 +169,9 @@ export function serializeInvoiceDocument(doc: InvoiceDocument): Invoice {
     total: doc.total || "0.00",
     notes: doc.notes,
     dueDate: formatDueDate(doc.dueDate),
+    paymentAddress: doc.paymentAddress || "",
+    paymentNetwork: "Polygon PoS",
+    chainId: 137,
     createdAt: formatSafeDate(doc.createdAt) || new Date().toISOString(),
     updatedAt: formatSafeDate(doc.updatedAt),
     paidAt: formatSafeDate(doc.paidAt),

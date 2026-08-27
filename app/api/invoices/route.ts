@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { InvoiceRepository } from "@/lib/repositories/invoice-repository"
 import { getAuthenticatedSession } from "@/lib/auth/session"
 import { InvoiceStatus } from "@/types/invoice"
+import { toChecksumAddress } from "@/lib/payments/config"
 
 export const dynamic = "force-dynamic"
 
@@ -57,8 +58,10 @@ export async function POST(req: NextRequest) {
       invoiceNumber = `INV-${nextNum}`
     }
 
+    const resolvedPaymentAddress = body.paymentAddress || session.walletAddress
     const newInvoice = await InvoiceRepository.createInvoice({
       ...body,
+      paymentAddress: resolvedPaymentAddress ? toChecksumAddress(resolvedPaymentAddress) : "",
       merchantId: session.merchantId,
       invoiceNumber,
     })

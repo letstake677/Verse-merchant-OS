@@ -17,7 +17,15 @@ interface InvoiceBuilderProps {
 export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBuilderProps) {
   const router = useRouter()
   const { address, isConnected } = useAccount()
-  const merchantAddr = address || MERCHANT_RECEIVING_ADDRESS
+  const [receivingWallet, setReceivingWallet] = React.useState<string>(address || "")
+
+  React.useEffect(() => {
+    if (address && !receivingWallet) {
+      setReceivingWallet(address)
+    }
+  }, [address, receivingWallet])
+
+  const merchantAddr = receivingWallet || address || MERCHANT_RECEIVING_ADDRESS
 
   const handleClose = () => {
     if (onClose) {
@@ -88,6 +96,7 @@ export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBui
     setSubmitError(null)
 
     try {
+      const targetPaymentAddress = receivingWallet.trim() || address || MERCHANT_RECEIVING_ADDRESS
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,7 +110,7 @@ export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBui
           subtotal: totals.subtotal,
           tax: totals.tax,
           total: totals.total,
-          paymentAddress: merchantAddr,
+          paymentAddress: targetPaymentAddress,
         }),
       })
 
@@ -229,6 +238,30 @@ export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBui
                 <option value="EUR">EUR (€)</option>
                 <option value="GBP">GBP (£)</option>
               </select>
+            </div>
+
+            <div className="space-y-1.5 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Settlement / Receiving Wallet (Polygon)
+                </label>
+                {address && (
+                  <button
+                    type="button"
+                    onClick={() => setReceivingWallet(address)}
+                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
+                  >
+                    Use Connected Wallet
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                placeholder="0x..."
+                value={receivingWallet}
+                onChange={(e) => setReceivingWallet(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900 bg-slate-50/50"
+              />
             </div>
           </div>
 

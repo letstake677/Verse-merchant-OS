@@ -27,6 +27,7 @@ interface PaymentQrModalProps {
   invoice: Invoice
   isOpen: boolean
   onClose: () => void
+  onPaid?: () => void
 }
 
 function safeParseBaseUnits(amountStr: string, decimals: number): string {
@@ -43,12 +44,39 @@ function safeParseBaseUnits(amountStr: string, decimals: number): string {
   }
 }
 
-export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps) {
+export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrModalProps) {
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
   const [qrType, setQrType] = React.useState<"eip681" | "address" | "link">("eip681")
   const [copied, setCopied] = React.useState<boolean>(false)
+  const [isDetectedPaid, setIsDetectedPaid] = React.useState<boolean>(invoice.status === "paid")
 
   const { calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
+
+  // Polling for automated payment detection while QR code is open
+  React.useEffect(() => {
+    if (!isOpen || isDetectedPaid) return
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.isPaid || data.status === "paid") {
+            setIsDetectedPaid(true)
+            if (onPaid) onPaid()
+          }
+        }
+      } catch {
+        // Continue polling
+      }
+    }, 4000)
+
+    return () => clearInterval(interval)
+  }, [isOpen, invoice.id, isDetectedPaid, onPaid])
 
   const availableTokens = SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []
 
@@ -131,8 +159,28 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
 
         {/* Scrollable Body */}
         <div className="p-6 space-y-4 overflow-y-auto">
-          {/* Asset Switcher */}
-          <div className="space-y-1.5">
+          {isDetectedPaid ? (
+            <div className="text-center py-6 space-y-4">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto animate-bounce">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              <h4 className="text-xl font-bold text-slate-900">Payment Verified!</h4>
+              <p className="text-sm text-slate-600 max-w-xs mx-auto">
+                Payment for invoice <span className="font-mono font-bold text-slate-900">{invoice.invoiceNumber}</span> has been confirmed on Polygon.
+              </p>
+              <div className="pt-2">
+                <button
+                  onClick={onClose}
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-medium text-sm transition-colors"
+                >
+                  Close Receipt
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Asset Switcher */}
+              <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <span>Select Payment Currency</span>
               <button
@@ -285,6 +333,8 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
               <span>Print QR Payment Code</span>
             </button>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

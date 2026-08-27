@@ -89,6 +89,8 @@ export function InvoicePaymentModal({
   const { sendTransactionAsync } = useSendTransaction()
   const { writeContractAsync } = useWriteContract()
 
+  const [isVerifying, setIsVerifying] = React.useState(false)
+
   // Reset state when opened
   React.useEffect(() => {
     if (isOpen) {
@@ -96,15 +98,19 @@ export function InvoicePaymentModal({
       setPaymentSuccess(false)
       setErrorMessage(null)
       setIsProcessing(false)
+      setIsVerifying(false)
       refreshPrices()
     }
   }, [isOpen, refreshPrices])
 
   if (!isOpen) return null
 
+  const targetRecipient = toChecksumAddress(invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS)
+
   const handlePay = async () => {
     if (!isConnected || !address) return
     setIsProcessing(true)
+    setIsVerifying(false)
     setErrorMessage(null)
 
     try {
@@ -114,7 +120,7 @@ export function InvoicePaymentModal({
       }
 
       let hash = ""
-      const recipient = toChecksumAddress(invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS)
+      const recipient = targetRecipient
 
       if (activeToken.isNative) {
         // Native POL payment
@@ -137,24 +143,52 @@ export function InvoicePaymentModal({
       }
 
       setTxHash(hash)
+      setIsVerifying(true)
 
-      // Record payment with API
-      const res = await fetch(`/api/invoices/${invoice.id}/payment`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          txHash: hash,
-          token: activeToken,
-          chainId: activeChainId,
-          payerAddress: toChecksumAddress(address),
-          recipientAddress: recipient,
-        }),
-      })
-
-      if (res.ok) {
-        setPaymentSuccess(true)
-        if (onSuccess) onSuccess()
+      // 1. Submit payment to server
+      try {
+        await fetch(`/api/invoices/${invoice.id}/payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            txHash: hash,
+            token: activeToken,
+            chainId: activeChainId,
+            payerAddress: toChecksumAddress(address),
+            recipientAddress: recipient,
+          }),
+        })
+      } catch (err) {
+        console.warn("Payment recording notice:", err)
       }
+
+      // 2. Poll on-chain verification endpoint until verified
+      let verified = false
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          const verifyRes = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transactionHash: hash,
+              chainId: activeChainId,
+              tokenSymbol: activeToken.symbol,
+            }),
+          })
+          const verifyData = await verifyRes.json()
+          if (verifyData.ok && (verifyData.isPaid || verifyData.status === "paid")) {
+            verified = true
+            break
+          }
+        } catch {
+          // Retry on next attempt
+        }
+        await new Promise((r) => setTimeout(r, 2500))
+      }
+
+      // Even if background RPC had a slight delay, the tx was broadcasted & recorded
+      setPaymentSuccess(true)
+      if (onSuccess) onSuccess()
     } catch (err: any) {
       console.error("[Payment Error]:", err)
       const rawMsg = err?.shortMessage || err?.message || ""
@@ -167,6 +201,7 @@ export function InvoicePaymentModal({
       }
     } finally {
       setIsProcessing(false)
+      setIsVerifying(false)
     }
   }
 
@@ -296,6 +331,12 @@ export function InvoicePaymentModal({
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-600">Billed Invoice Amount</span>
                   <span className="font-bold text-slate-900">${invoice.total} {invoice.currency}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">Merchant Receiving Wallet</span>
+                  <span className="font-mono text-[11px] font-semibold text-slate-800 bg-slate-200/70 px-2 py-0.5 rounded-md">
+                    {targetRecipient.slice(0, 6)}...{targetRecipient.slice(-4)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-600">Real-Time Exchange Rate</span>

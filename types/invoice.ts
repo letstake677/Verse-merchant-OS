@@ -144,6 +144,9 @@ export interface Invoice {
   total: string
   notes?: string
   dueDate?: string
+  paymentAddress?: string
+  paymentNetwork?: string
+  chainId?: number
   createdAt: string
   updatedAt?: string
   paidAt?: string
