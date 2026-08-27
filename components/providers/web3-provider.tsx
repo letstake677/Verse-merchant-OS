@@ -16,14 +16,14 @@ import {
   type AppKitNetwork,
 } from "@reown/appkit/networks"
 
-// 1. Get Project ID from client-accessible environment variable or fallback
+// 1. Get Project ID from environment variable or fallback
 export const projectId =
-  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ||
+  process.env.NEXT_REOWN_PROJECT_ID ||
+  process.env.REOWN_PROJECT_ID ||
+  process.env.PROJECT_ID ||
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
   process.env.NEXT_PUBLIC_PROJECT_ID ||
   process.env.NEXT_PUBLIC_WC_PROJECT_ID ||
-  process.env.NEXT_REOWN_PROJECT_ID ||
-  process.env.REOWN_PROJECT_ID ||
   "b56e18d47c72ab683b10814fe9495694"
 
 // Top EVM wallet IDs for Reown AppKit Explorer
