@@ -231,126 +231,200 @@ export async function POST(
     if (merchantWalletAddress && merchantWalletAddress.startsWith("0x") && merchantWalletAddress.length === 42) {
       try {
         const checksumRecipient = toChecksumAddress(merchantWalletAddress)
-        const transferEvent = parseAbiItem(
-          "event Transfer(address indexed from, address indexed to, uint256 value)"
-        )
+        const lowerRecipient = checksumRecipient.toLowerCase()
 
-        for (const rpc of POLYGON_RPCS) {
+        // 1. First attempt: Blockscout / Polygonscan API for instant zero-RPC-limit lookup
+        let detectedTxHash: string | null = null
+        let detectedPayer: string | null = null
+        let detectedBlock: number | null = null
+        let detectedTokenSymbol = tokenSymbol || "USDC"
+
+        try {
+          // Polygonscan tokentx
+          const psRes = await fetch(
+            `https://api.polygonscan.com/api?module=account&action=tokentx&address=${checksumRecipient}&sort=desc&page=1&offset=5`,
+            { signal: AbortSignal.timeout(3000) }
+          )
+          if (psRes.ok) {
+            const psData = await psRes.json()
+            if (psData && psData.status === "1" && Array.isArray(psData.result)) {
+              for (const tx of psData.result) {
+                if (tx.to && tx.to.toLowerCase() === lowerRecipient && tx.hash) {
+                  detectedTxHash = tx.hash
+                  detectedPayer = tx.from
+                  detectedBlock = parseInt(tx.blockNumber, 10) || null
+                  if (tx.tokenSymbol) detectedTokenSymbol = tx.tokenSymbol.toUpperCase()
+                  break
+                }
+              }
+            }
+          }
+        } catch {
+          // Fallback to RPC log scanning
+        }
+
+        // If Polygonscan didn't find recent tokentx, check Blockscout V2
+        if (!detectedTxHash) {
           try {
-            const client = createPublicClient({
-              chain: polygon,
-              transport: http(process.env.POLYGON_RPC_URL || rpc, { timeout: 6000 }),
-            })
-
-            const latestBlock = await client.getBlockNumber()
-            const fromBlock = latestBlock > 2000n ? latestBlock - 2000n : 0n
-
-            const logs = await client.getLogs({
-              event: transferEvent,
-              args: {
-                to: checksumRecipient as `0x${string}`,
-              },
-              fromBlock,
-            })
-
-            if (logs && logs.length > 0) {
-              const sortedLogs = [...logs].reverse()
-
-              for (const log of sortedLogs) {
-                if (log.transactionHash) {
-                  const receipt = await client.getTransactionReceipt({ hash: log.transactionHash })
-                  if (receipt && receipt.status === "success") {
-                    const payerAddress = receipt.from?.toLowerCase() || undefined
-                    const blockNumber = Number(receipt.blockNumber)
-
-                    let detectedSymbol = "USDC"
-                    const tokenContract = log.address.toLowerCase()
-                    if (tokenContract === "0xc708d6f2153933daa50b2d0758955be0a93a8fec") {
-                      detectedSymbol = "VERSE"
-                    } else if (tokenContract === "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359") {
-                      detectedSymbol = "USDC"
-                    }
-
-                    const paymentToken = resolvePaymentToken(detectedSymbol, chainId) || {
-                      symbol: detectedSymbol,
-                      name: detectedSymbol,
-                      address: log.address,
-                      isNative: false,
-                      decimals: detectedSymbol === "USDC" ? 6 : 18,
-                      chainId,
-                      color: "purple",
-                    }
-
-                    const existingPayment = await PaymentRepository.findActivePaymentForInvoice(
-                      invoice.id,
-                      invoice.merchantId
-                    )
-
-                    let confirmedPayment
-                    if (existingPayment) {
-                      confirmedPayment = await PaymentRepository.updatePaymentStatus(
-                        existingPayment.id,
-                        invoice.merchantId,
-                        {
-                          status: "confirmed",
-                          transactionHash: log.transactionHash,
-                          blockNumber,
-                          payerAddress,
-                        }
-                      )
-                    } else {
-                      const newPayment = await PaymentRepository.createPayment({
-                        merchantId: invoice.merchantId,
-                        invoiceId: invoice.id,
-                        amount: invoice.total,
-                        currency: invoice.currency,
-                        token: paymentToken,
-                        chainId,
-                        recipientAddress: merchantWalletAddress,
-                        reference: `INV-${invoice.invoiceNumber}`,
-                      })
-                      confirmedPayment = await PaymentRepository.updatePaymentStatus(
-                        newPayment.id,
-                        invoice.merchantId,
-                        {
-                          status: "confirmed",
-                          transactionHash: log.transactionHash,
-                          blockNumber,
-                          payerAddress,
-                        }
-                      )
-                    }
-
-                    const updatedInvoice = await InvoiceRepository.markInvoicePaid(
-                      invoice.id,
-                      invoice.merchantId,
-                      confirmedPayment?.id
-                    )
-
-                    AppLogger.auditPayment("onchain_autoscan_confirmed", {
-                      invoiceId: invoice.id,
-                      merchantId: invoice.merchantId,
-                      txHash: log.transactionHash,
-                      amount: invoice.total,
-                      token: detectedSymbol,
-                    })
-
-                    return NextResponse.json({
-                      ok: true,
-                      isPaid: true,
-                      status: "paid",
-                      message: "Auto-detected incoming payment on Polygon!",
-                      invoice: updatedInvoice || { ...invoice, status: "paid" },
-                      payment: confirmedPayment,
-                      txHash: log.transactionHash,
-                    })
+            const bsRes = await fetch(
+              `https://polygon.blockscout.com/api/v2/addresses/${checksumRecipient}/token-transfers`,
+              { signal: AbortSignal.timeout(3000) }
+            )
+            if (bsRes.ok) {
+              const bsData = await bsRes.json()
+              if (bsData && Array.isArray(bsData.items)) {
+                for (const item of bsData.items) {
+                  if (item.to?.hash?.toLowerCase() === lowerRecipient && item.tx_hash) {
+                    detectedTxHash = item.tx_hash
+                    detectedPayer = item.from?.hash
+                    detectedBlock = item.block_number || null
+                    if (item.token?.symbol) detectedTokenSymbol = item.token.symbol.toUpperCase()
+                    break
                   }
                 }
               }
             }
-            break
           } catch {
-            // Try next RPC
+            // Continue to RPC logs
+          }
+        }
+
+        // If APIs returned a txHash, confirm receipt and finish
+        if (detectedTxHash) {
+          txHash = detectedTxHash
+        } else {
+          // 2. Viem getLogs with safe 200-block range (prevents RPC block range limit errors)
+          const transferEvent = parseAbiItem(
+            "event Transfer(address indexed from, address indexed to, uint256 value)"
+          )
+
+          for (const rpc of POLYGON_RPCS) {
+            try {
+              const client = createPublicClient({
+                chain: polygon,
+                transport: http(process.env.POLYGON_RPC_URL || rpc, { timeout: 4000 }),
+              })
+
+              const latestBlock = await client.getBlockNumber()
+              // Use safe small 200 block window (~6 minutes on Polygon) to prevent 429/range errors
+              const fromBlock = latestBlock > 200n ? latestBlock - 200n : 0n
+
+              const logs = await client.getLogs({
+                event: transferEvent,
+                args: {
+                  to: checksumRecipient as `0x${string}`,
+                },
+                fromBlock,
+              })
+
+              if (logs && logs.length > 0) {
+                const latestLog = logs[logs.length - 1]
+                if (latestLog.transactionHash) {
+                  detectedTxHash = latestLog.transactionHash
+                  break
+                }
+              }
+            } catch {
+              // Try next RPC
+            }
+          }
+        }
+
+        // If auto-scanner identified a transaction hash
+        if (detectedTxHash) {
+          // Verify with Viem client
+          for (const rpc of POLYGON_RPCS) {
+            try {
+              const client = createPublicClient({
+                chain: polygon,
+                transport: http(process.env.POLYGON_RPC_URL || rpc, { timeout: 5000 }),
+              })
+
+              const receipt = await client.getTransactionReceipt({
+                hash: detectedTxHash as `0x${string}`,
+              })
+
+              if (receipt && receipt.status === "success") {
+                const payerAddress = detectedPayer || receipt.from?.toLowerCase() || undefined
+                const blockNumber = detectedBlock || Number(receipt.blockNumber)
+
+                const paymentToken = resolvePaymentToken(detectedTokenSymbol, chainId) || {
+                  symbol: detectedTokenSymbol,
+                  name: detectedTokenSymbol,
+                  address: "0x0000000000000000000000000000000000000000",
+                  isNative: false,
+                  decimals: detectedTokenSymbol === "USDC" ? 6 : 18,
+                  chainId,
+                  color: "purple",
+                }
+
+                const existingPayment = await PaymentRepository.findActivePaymentForInvoice(
+                  invoice.id,
+                  invoice.merchantId
+                )
+
+                let confirmedPayment
+                if (existingPayment) {
+                  confirmedPayment = await PaymentRepository.updatePaymentStatus(
+                    existingPayment.id,
+                    invoice.merchantId,
+                    {
+                      status: "confirmed",
+                      transactionHash: detectedTxHash,
+                      blockNumber,
+                      payerAddress,
+                    }
+                  )
+                } else {
+                  const newPayment = await PaymentRepository.createPayment({
+                    merchantId: invoice.merchantId,
+                    invoiceId: invoice.id,
+                    amount: invoice.total,
+                    currency: invoice.currency,
+                    token: paymentToken,
+                    chainId,
+                    recipientAddress: merchantWalletAddress,
+                    reference: `INV-${invoice.invoiceNumber}`,
+                  })
+                  confirmedPayment = await PaymentRepository.updatePaymentStatus(
+                    newPayment.id,
+                    invoice.merchantId,
+                    {
+                      status: "confirmed",
+                      transactionHash: detectedTxHash,
+                      blockNumber,
+                      payerAddress,
+                    }
+                  )
+                }
+
+                const updatedInvoice = await InvoiceRepository.markInvoicePaid(
+                  invoice.id,
+                  invoice.merchantId,
+                  confirmedPayment?.id
+                )
+
+                AppLogger.auditPayment("onchain_autoscan_confirmed", {
+                  invoiceId: invoice.id,
+                  merchantId: invoice.merchantId,
+                  txHash: detectedTxHash,
+                  amount: invoice.total,
+                  token: detectedTokenSymbol,
+                })
+
+                return NextResponse.json({
+                  ok: true,
+                  isPaid: true,
+                  status: "paid",
+                  message: "Auto-detected incoming payment on Polygon!",
+                  invoice: updatedInvoice || { ...invoice, status: "paid" },
+                  payment: confirmedPayment,
+                  txHash: detectedTxHash,
+                })
+              }
+            } catch {
+              // Try next RPC
+            }
           }
         }
       } catch (scanErr) {
