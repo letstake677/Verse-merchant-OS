@@ -136,7 +136,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
 
   const invoiceAmountNum = parseFloat(invoice.total || "0")
   const tokenCalc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", activeToken.symbol)
-  const recipient = toChecksumAddress(invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS)
+  const recipient = toChecksumAddress(invoice.paymentAddress)
 
   // Construct standard EIP-681 payment URI with raw integer base units for wallets
   const baseUnits = safeParseBaseUnits(tokenCalc.tokenAmount, activeToken.decimals)

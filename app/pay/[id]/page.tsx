@@ -275,9 +275,7 @@ export default function PublicPayPage() {
     activeQrToken.symbol
   )
 
-  const targetRecipient = toChecksumAddress(
-    invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS
-  )
+  const targetRecipient = toChecksumAddress(invoice.paymentAddress)
 
   const tokenBaseUnits = safeParseBaseUnits(
     activeTokenCalc.tokenAmount,
@@ -375,21 +373,29 @@ export default function PublicPayPage() {
             <div className="flex items-center gap-2 text-slate-700 font-medium">
               <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
               <span>Merchant Receiving Wallet:</span>
-              <span className="font-mono font-bold text-purple-950 bg-white px-2 py-0.5 rounded border border-purple-200">
-                {targetRecipient.slice(0, 8)}...{targetRecipient.slice(-6)}
-              </span>
-            </div>
-            <button
-              onClick={() => copyToClipboard(targetRecipient, "merchant_wallet")}
-              className="inline-flex items-center gap-1 text-purple-700 hover:text-purple-900 font-semibold text-xs transition-colors cursor-pointer"
-            >
-              {copiedField === "merchant_wallet" ? (
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              {targetRecipient ? (
+                <span className="font-mono font-bold text-purple-950 bg-white px-2 py-0.5 rounded border border-purple-200">
+                  {targetRecipient.slice(0, 8)}...{targetRecipient.slice(-6)}
+                </span>
               ) : (
-                <Copy className="w-3.5 h-3.5" />
+                <span className="font-semibold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded border border-amber-200 text-[11px]">
+                  Address Not Set by Creator
+                </span>
               )}
-              <span>{copiedField === "merchant_wallet" ? "Address Copied" : "Copy Wallet"}</span>
-            </button>
+            </div>
+            {targetRecipient && (
+              <button
+                onClick={() => copyToClipboard(targetRecipient, "merchant_wallet")}
+                className="inline-flex items-center gap-1 text-purple-700 hover:text-purple-900 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                {copiedField === "merchant_wallet" ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                <span>{copiedField === "merchant_wallet" ? "Address Copied" : "Copy Wallet"}</span>
+              </button>
+            )}
           </div>
 
           {/* Paid Banner or Payment Methods */}

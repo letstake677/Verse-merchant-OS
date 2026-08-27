@@ -58,10 +58,16 @@ export async function POST(req: NextRequest) {
       invoiceNumber = `INV-${nextNum}`
     }
 
-    const resolvedPaymentAddress = body.paymentAddress || session.walletAddress
+    const rawPaymentAddress = body.paymentAddress || (session.walletAddress?.startsWith("0x") ? session.walletAddress : "")
+    const resolvedPaymentAddress = toChecksumAddress(rawPaymentAddress)
+
+    if (!resolvedPaymentAddress) {
+      return NextResponse.json({ ok: false, error: "A valid Polygon wallet address (0x...) is required as the payment recipient." }, { status: 400 })
+    }
+
     const newInvoice = await InvoiceRepository.createInvoice({
       ...body,
-      paymentAddress: resolvedPaymentAddress ? toChecksumAddress(resolvedPaymentAddress) : "",
+      paymentAddress: resolvedPaymentAddress,
       merchantId: session.merchantId,
       invoiceNumber,
     })

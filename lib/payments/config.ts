@@ -16,27 +16,43 @@ export interface PaymentToken {
 /**
  * Standard default fallback merchant address (empty by default to require explicit wallet connection).
  */
-export const DEFAULT_MERCHANT_ADDRESS: `0x${string}` =
-  "0x0000000000000000000000000000000000000000"
+export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 /**
- * Safely resolves and checksums any EVM address.
- * Prevents "Address is invalid" runtime exceptions from Viem.
+ * Checks if a string is a valid non-zero EVM address.
  */
-export function toChecksumAddress(raw?: string | null): `0x${string}` {
-  if (!raw) return DEFAULT_MERCHANT_ADDRESS
+export function isValidEvmAddress(raw?: string | null): boolean {
+  if (!raw) return false
   const trimmed = raw.trim()
+  if (!trimmed.startsWith("0x") || trimmed.length !== 42) return false
+  if (trimmed.toLowerCase() === ZERO_ADDRESS.toLowerCase()) return false
   try {
-    if (trimmed.startsWith("0x") && trimmed.length === 42) {
-      return getAddress(trimmed.toLowerCase())
-    }
-    return getAddress(trimmed)
+    getAddress(trimmed.toLowerCase())
+    return true
   } catch {
-    return DEFAULT_MERCHANT_ADDRESS
+    return false
   }
 }
 
-export const MERCHANT_RECEIVING_ADDRESS: `0x${string}` = toChecksumAddress(
+/**
+ * Safely resolves and checksums any EVM address.
+ * Returns empty string if missing, invalid, or zero address.
+ */
+export function toChecksumAddress(raw?: string | null): `0x${string}` | "" {
+  if (!raw) return ""
+  const trimmed = raw.trim()
+  if (!trimmed || trimmed.toLowerCase() === ZERO_ADDRESS.toLowerCase()) return ""
+  try {
+    if (trimmed.startsWith("0x") && trimmed.length === 42) {
+      return getAddress(trimmed.toLowerCase()) as `0x${string}`
+    }
+    return getAddress(trimmed) as `0x${string}`
+  } catch {
+    return ""
+  }
+}
+
+export const MERCHANT_RECEIVING_ADDRESS: `0x${string}` | "" = toChecksumAddress(
   process.env.MERCHANT_WALLET || process.env.NEXT_PUBLIC_MERCHANT_WALLET || ""
 )
 

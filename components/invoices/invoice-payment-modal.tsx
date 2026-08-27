@@ -105,7 +105,7 @@ export function InvoicePaymentModal({
 
   if (!isOpen) return null
 
-  const targetRecipient = toChecksumAddress(invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS)
+  const targetRecipient = toChecksumAddress(invoice.paymentAddress)
 
   const handlePay = async () => {
     if (!isConnected || !address) return
