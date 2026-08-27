@@ -6,18 +6,29 @@ export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getAuthenticatedSession()
-    if (!session) {
-      return NextResponse.json({ ok: false, message: "Unauthorized" }, { status: 401 })
+    const { id } = await params
+    if (!id) {
+      return NextResponse.json({ ok: false, error: "Missing invoice ID" }, { status: 400 })
     }
 
-    const { id } = await params
-    
-    // First try by database ObjectId, then fallback to invoiceNumber
-    let invoice = await InvoiceRepository.findByIdForMerchant(session.merchantId, id)
-    
+    const session = await getAuthenticatedSession()
+    let invoice = null
+
+    if (session) {
+      // First try by database ObjectId, then fallback to invoiceNumber for authenticated merchant
+      invoice = await InvoiceRepository.findByIdForMerchant(id, session.merchantId)
+      
+      if (!invoice) {
+        invoice = await InvoiceRepository.findByMerchantIdAndInvoiceNumber(session.merchantId, id)
+      }
+    }
+
+    // If no session or not found in merchant scope (e.g. public customer payment checkout /pay/[id])
     if (!invoice) {
-      invoice = await InvoiceRepository.findByMerchantIdAndInvoiceNumber(session.merchantId, id)
+      invoice = await InvoiceRepository.findById(id)
+      if (!invoice) {
+        invoice = await InvoiceRepository.findByInvoiceNumber(id)
+      }
     }
 
     if (!invoice) {
@@ -41,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params
     const body = await req.json()
     
-    const updated = await InvoiceRepository.updateInvoiceForMerchant(session.merchantId, id, body)
+    const updated = await InvoiceRepository.updateInvoiceForMerchant(id, session.merchantId, body)
 
     if (!updated) {
       return NextResponse.json({ ok: false, error: "Invoice not found or could not be updated" }, { status: 404 })

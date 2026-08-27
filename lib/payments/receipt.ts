@@ -31,7 +31,7 @@ export function buildCanonicalReceipt(
   invoice: Invoice,
   merchantInfo?: { businessName?: string; displayName?: string; email?: string }
 ): PaymentReceipt {
-  const chainId = payment.chainId || invoice.chainId || 137
+  const chainId = payment.chainId || (invoice as any).chainId || 137
   const networkName = getNetworkDisplayName(chainId)
   const txHash = payment.transactionHash || ""
   const explorerUrl = getExplorerTxUrl(txHash, chainId)
@@ -100,7 +100,7 @@ export function buildCanonicalReceipt(
     taxAmount,
     total,
     notes: invoice.notes,
-    terms: invoice.terms,
+    terms: (invoice as any).terms || "",
     explorerUrl,
   }
 }

@@ -96,7 +96,7 @@ export const PAYMENT_EVENT_INDEXES = [
 async function ensureCollectionIndexes(
   db: Db,
   collectionName: string,
-  indexes: Array<{ key: Record<string, number>; options: Record<string, unknown> }>
+  indexes: Array<{ key: any; options: any }>
 ): Promise<void> {
   const collection = db.collection(collectionName)
   for (const index of indexes) {

@@ -33,16 +33,26 @@ export class InvoiceRepository {
   }
 
   /**
-   * Finds a single invoice by its ID without merchant scoping (for public payment checkout).
+   * Finds a single invoice by its ID or invoiceNumber without merchant scoping (for public payment checkout).
    */
   static async findById(invoiceId: string): Promise<Invoice | null> {
-    if (!invoiceId || !ObjectId.isValid(invoiceId)) return null
+    if (!invoiceId) return null
 
     try {
       const collection = await this.getCollection()
-      const doc = await collection.findOne({
-        _id: new ObjectId(invoiceId),
-      })
+      let doc = null
+
+      if (ObjectId.isValid(invoiceId)) {
+        doc = await collection.findOne({
+          _id: new ObjectId(invoiceId),
+        })
+      }
+
+      if (!doc) {
+        doc = await collection.findOne({
+          invoiceNumber: invoiceId.trim(),
+        })
+      }
 
       if (!doc) return null
       return serializeInvoiceDocument(doc)
@@ -53,9 +63,29 @@ export class InvoiceRepository {
   }
 
   /**
-   * Finds a single invoice by its ID, strictly isolated to the specified merchant.
+   * Finds an invoice by invoiceNumber without merchant scoping.
+   */
+  static async findByInvoiceNumber(invoiceNumber: string): Promise<Invoice | null> {
+    if (!invoiceNumber) return null
+
+    try {
+      const collection = await this.getCollection()
+      const doc = await collection.findOne({
+        invoiceNumber: invoiceNumber.trim(),
+      })
+
+      if (!doc) return null
+      return serializeInvoiceDocument(doc)
+    } catch (error) {
+      console.error("[InvoiceRepository.findByInvoiceNumber] Error:", error)
+      throw new Error("Failed to query invoice by invoice number.")
+    }
+  }
+
+  /**
+   * Finds a single invoice by its ID or invoiceNumber, strictly isolated to the specified merchant.
    *
-   * @param invoiceId - Hexadecimal MongoDB ObjectId string
+   * @param invoiceId - Hexadecimal MongoDB ObjectId string or invoice number
    * @param merchantId - Authenticated merchant identifier
    */
   static async findByIdForMerchant(
@@ -63,14 +93,24 @@ export class InvoiceRepository {
     merchantId: string
   ): Promise<Invoice | null> {
     if (!invoiceId || !merchantId) return null
-    if (!ObjectId.isValid(invoiceId)) return null
 
     try {
       const collection = await this.getCollection()
-      const doc = await collection.findOne({
-        _id: new ObjectId(invoiceId),
-        merchantId,
-      })
+      let doc = null
+
+      if (ObjectId.isValid(invoiceId)) {
+        doc = await collection.findOne({
+          _id: new ObjectId(invoiceId),
+          merchantId,
+        })
+      }
+
+      if (!doc) {
+        doc = await collection.findOne({
+          invoiceNumber: invoiceId.trim(),
+          merchantId,
+        })
+      }
 
       if (!doc) return null
       return serializeInvoiceDocument(doc)

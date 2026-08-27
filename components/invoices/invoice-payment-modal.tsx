@@ -11,7 +11,7 @@ import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/web3/conf
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import { useAccount, useSendTransaction, useWriteContract, useSwitchChain, useBalance } from "wagmi"
 import { useAppKit } from "@reown/appkit/react"
-import { parseUnits, erc20Abi } from "viem"
+import { parseUnits, formatUnits, erc20Abi } from "viem"
 import {
   CheckCircle2,
   AlertCircle,
@@ -72,9 +72,20 @@ export function InvoicePaymentModal({
 
   const { data: balanceData } = useBalance({
     address: address,
-    token: activeToken.isNative ? undefined : activeToken.address,
     chainId: activeChainId,
   })
+
+  const formattedBalance = React.useMemo(() => {
+    if (!balanceData) return null
+    try {
+      if (typeof balanceData.value === "bigint" && balanceData.decimals) {
+        return parseFloat(formatUnits(balanceData.value, balanceData.decimals)).toFixed(4)
+      }
+      return null
+    } catch {
+      return null
+    }
+  }, [balanceData])
 
   const { sendTransactionAsync } = useSendTransaction()
   const { writeContractAsync } = useWriteContract()
@@ -335,11 +346,11 @@ export function InvoicePaymentModal({
                     </span>
                   )}
                 </div>
-                {isConnected && balanceData && (
+                {isConnected && formattedBalance && (
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
                     <span>Wallet Balance:</span>
                     <span className="font-medium text-slate-700">
-                      {parseFloat(balanceData.formatted).toFixed(4)} {balanceData.symbol}
+                      {formattedBalance} {balanceData?.symbol || "POL"}
                     </span>
                   </div>
                 )}

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const { id } = await params
     
-    let invoice = await InvoiceRepository.findByIdForMerchant(session.merchantId, id)
+    let invoice = await InvoiceRepository.findByIdForMerchant(id, session.merchantId)
     if (!invoice) {
       invoice = await InvoiceRepository.findByMerchantIdAndInvoiceNumber(session.merchantId, id)
     }

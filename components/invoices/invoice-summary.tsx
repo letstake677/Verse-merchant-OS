@@ -34,7 +34,7 @@ export function InvoiceSummary({
         ? `$${paidAmount.toFixed(2)}`
         : paidAmount
       : `$${safeInvoices
-          .filter((inv) => inv?.status === "paid" || inv?.status === "PAID")
+          .filter((inv) => (inv?.status as string)?.toLowerCase() === "paid")
           .reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
           .toFixed(2)}`
 
@@ -44,7 +44,7 @@ export function InvoiceSummary({
         ? `$${outstandingAmount.toFixed(2)}`
         : outstandingAmount
       : `$${safeInvoices
-          .filter((inv) => inv?.status !== "paid" && inv?.status !== "PAID")
+          .filter((inv) => (inv?.status as string)?.toLowerCase() !== "paid")
           .reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
           .toFixed(2)}`
 

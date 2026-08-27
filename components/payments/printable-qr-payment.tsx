@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import QRCode from "qrcode"
+import { QRCodeSVG } from "qrcode.react"
 import { Invoice } from "@/types/invoice"
 
 interface PrintableQRPaymentProps {
@@ -26,23 +26,6 @@ export function PrintableQRPayment({
   networkName = "Polygon Mainnet (137)",
   businessName = "Verse Merchant",
 }: PrintableQRPaymentProps) {
-  const [qrSvg, setQrSvg] = React.useState<string>("")
-
-  React.useEffect(() => {
-    if (!paymentUrl) return
-    QRCode.toString(paymentUrl, {
-      type: "svg",
-      margin: 1,
-      width: 220,
-      color: {
-        dark: "#0f172a",
-        light: "#ffffff",
-      },
-    })
-      .then((svg) => setQrSvg(svg))
-      .catch((err) => console.error("[PrintableQRPayment] SVG generation error:", err))
-  }, [paymentUrl])
-
   return (
     <div
       className="p-6 max-w-sm mx-auto bg-white text-slate-900 border-2 border-slate-900 rounded-2xl space-y-4 print:border-slate-900 print:shadow-none print:break-inside-avoid print:max-w-md"
@@ -77,11 +60,16 @@ export function PrintableQRPayment({
 
       {/* QR Code Container */}
       <div className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded-xl shadow-xs">
-        {qrSvg ? (
-          <div
-            className="w-48 h-48 flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
-            dangerouslySetInnerHTML={{ __html: qrSvg }}
-          />
+        {paymentUrl ? (
+          <div className="w-48 h-48 flex items-center justify-center">
+            <QRCodeSVG
+              value={paymentUrl}
+              size={192}
+              level="M"
+              includeMargin={false}
+              className="w-full h-full"
+            />
+          </div>
         ) : (
           <div className="w-48 h-48 flex items-center justify-center bg-slate-100 text-slate-400 text-xs font-mono">
             Generating QR...
