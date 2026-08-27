@@ -14,26 +14,26 @@ export interface CryptoPrices {
   lastUpdated: number
 }
 
-// Fallback baseline prices in case all external public APIs are unreachable or rate-limited
+// Baseline prices set to 0 initially so no estimated values are shown until live prices are fetched
 export const FALLBACK_PRICES: Record<string, number> = {
   USD: 1.0,
   USDC: 1.0,
-  POL: 0.38, // 1 POL ≈ $0.38 USD
-  VERSE: 0.00021, // 1 VERSE ≈ $0.00021 USD
+  POL: 0,
+  VERSE: 0,
 }
 
 let priceCache: CryptoPrices = {
   USD: 1.0,
   USDC: 1.0,
-  POL: 0.38,
-  VERSE: 0.00021,
+  POL: 0,
+  VERSE: 0,
   lastUpdated: 0,
 }
 
-const CACHE_TTL_MS = 30 * 1000 // 30 seconds cache
+const CACHE_TTL_MS = 15 * 1000 // 15 seconds cache
 
 /**
- * Fetches real-time price of POL, VERSE, and USDC in USD.
+ * Fetches real-time price of POL, VERSE, and USDC in USD without static baseline defaults.
  */
 export async function getLiveCryptoPrices(): Promise<CryptoPrices> {
   const now = Date.now()
@@ -41,111 +41,71 @@ export async function getLiveCryptoPrices(): Promise<CryptoPrices> {
     return priceCache
   }
 
-  let polPrice = priceCache.POL || FALLBACK_PRICES.POL
-  let versePrice = priceCache.VERSE || FALLBACK_PRICES.VERSE
-  let usdcPrice = 1.0
+  let polPrice = priceCache.POL || 0
+  let versePrice = priceCache.VERSE || 0
+  let usdcPrice = priceCache.USDC || 1.0
 
-  // 1. Try Binance Public API for POL (fastest & highest reliability)
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 3000)
-    const binanceRes = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=POLUSDT", {
-      signal: controller.signal,
-      headers: { Accept: "application/json" },
-      next: { revalidate: 30 },
-    })
-    clearTimeout(timeout)
-
-    if (binanceRes.ok) {
-      const data = await binanceRes.json()
-      const parsed = parseFloat(data.price)
-      if (parsed > 0) {
-        polPrice = parsed
-      }
-    }
-  } catch (err) {
-    console.warn("[Prices] Binance API fetch skipped:", (err as Error).message)
-  }
-
-  // 2. Try DexScreener for VERSE (Polygon contract: 0xc708d6f2153933daa50b2d0758955be0a93a8fec)
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 3500)
-    const dexRes = await fetch(
-      "https://api.dexscreener.com/latest/dex/tokens/0xc708d6f2153933daa50b2d0758955be0a93a8fec",
-      {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-        next: { revalidate: 30 },
-      }
-    )
-    clearTimeout(timeout)
-
-    if (dexRes.ok) {
-      const dexData = await dexRes.json()
-      if (dexData.pairs && dexData.pairs.length > 0) {
-        const pair = dexData.pairs[0]
-        const priceUsd = parseFloat(pair.priceUsd)
-        if (priceUsd > 0) {
-          versePrice = priceUsd
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("[Prices] DexScreener API fetch skipped:", (err as Error).message)
-  }
-
-  // 3. Fallback: CoinGecko Free API if either price still needs fresh data
-  if (polPrice === FALLBACK_PRICES.POL || versePrice === FALLBACK_PRICES.VERSE) {
-    try {
+    const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 3500)
-      const cgRes = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=polygon-ecosystem-token,verse,usd-coin&vs_currencies=usd",
-        {
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const res = await fetch(url, {
           signal: controller.signal,
           headers: { Accept: "application/json" },
-          next: { revalidate: 60 },
-        }
-      )
-      clearTimeout(timeout)
-
-      if (cgRes.ok) {
-        const data = await cgRes.json()
-        if (data["polygon-ecosystem-token"]?.usd) {
-          polPrice = data["polygon-ecosystem-token"].usd
-        }
-        if (data["verse"]?.usd) {
-          versePrice = data["verse"].usd
-        }
-        if (data["usd-coin"]?.usd) {
-          usdcPrice = data["usd-coin"].usd
-        }
+          cache: "no-store",
+        })
+        clearTimeout(timer)
+        if (res.ok) return await res.json()
+      } catch {
+        clearTimeout(timer)
       }
-    } catch (err) {
-      console.warn("[Prices] CoinGecko API fetch skipped:", (err as Error).message)
+      return null
     }
-  }
 
-  // 4. Fallback: CryptoCompare API
-  if (polPrice === FALLBACK_PRICES.POL || versePrice === FALLBACK_PRICES.VERSE) {
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 3000)
-      const ccRes = await fetch(
-        "https://min-api.cryptocompare.com/data/pricemulti?fsyms=POL,MATIC,VERSE,USDC&tsyms=USD",
-        { signal: controller.signal }
-      )
-      clearTimeout(timeout)
-      if (ccRes.ok) {
-        const ccData = await ccRes.json()
-        if (ccData.POL?.USD) polPrice = ccData.POL.USD
-        else if (ccData.MATIC?.USD) polPrice = ccData.MATIC.USD
-        if (ccData.VERSE?.USD) versePrice = ccData.VERSE.USD
-      }
-    } catch (e) {
-      console.warn("[Prices] CryptoCompare API skipped:", (e as Error).message)
+    const [binanceData, dexData, cgData, ccData] = await Promise.all([
+      fetchWithTimeout("https://api.binance.com/api/v3/ticker/price?symbol=POLUSDT", 2500),
+      fetchWithTimeout("https://api.dexscreener.com/latest/dex/tokens/0xc708d6f2153933daa50b2d0758955be0a93a8fec", 2500),
+      fetchWithTimeout("https://api.coingecko.com/api/v3/simple/price?ids=polygon-ecosystem-token,verse,usd-coin&vs_currencies=usd", 2500),
+      fetchWithTimeout("https://min-api.cryptocompare.com/data/pricemulti?fsyms=POL,MATIC,VERSE,USDC&tsyms=USD", 2500),
+    ])
+
+    // Parse Binance POL
+    if (binanceData?.price) {
+      const p = parseFloat(binanceData.price)
+      if (p > 0) polPrice = p
     }
+
+    // Parse DexScreener VERSE
+    if (dexData?.pairs?.[0]?.priceUsd) {
+      const p = parseFloat(dexData.pairs[0].priceUsd)
+      if (p > 0) versePrice = p
+    }
+
+    // Parse CoinGecko
+    if (cgData) {
+      if (cgData["polygon-ecosystem-token"]?.usd && polPrice === 0) {
+        polPrice = cgData["polygon-ecosystem-token"].usd
+      }
+      if (cgData["verse"]?.usd && versePrice === 0) {
+        versePrice = cgData["verse"].usd
+      }
+      if (cgData["usd-coin"]?.usd) {
+        usdcPrice = cgData["usd-coin"].usd
+      }
+    }
+
+    // Parse CryptoCompare
+    if (ccData) {
+      if ((ccData.POL?.USD || ccData.MATIC?.USD) && polPrice === 0) {
+        polPrice = ccData.POL?.USD || ccData.MATIC?.USD
+      }
+      if (ccData.VERSE?.USD && versePrice === 0) {
+        versePrice = ccData.VERSE?.USD
+      }
+    }
+  } catch (err) {
+    console.warn("[Prices] Live price fetch error:", (err as Error).message)
   }
 
   priceCache = {
@@ -153,7 +113,7 @@ export async function getLiveCryptoPrices(): Promise<CryptoPrices> {
     USDC: usdcPrice || 1.0,
     POL: polPrice,
     VERSE: versePrice,
-    lastUpdated: now,
+    lastUpdated: Date.now(),
   }
 
   return priceCache
@@ -198,14 +158,20 @@ export function calculateTokenAmount(
   if (symbol === "USDC") {
     tokenPriceUsd = prices.USDC || 1.0
   } else if (symbol === "POL" || symbol === "MATIC") {
-    tokenPriceUsd = prices.POL || FALLBACK_PRICES.POL
+    tokenPriceUsd = prices.POL || 0
   } else if (symbol === "VERSE") {
-    tokenPriceUsd = prices.VERSE || FALLBACK_PRICES.VERSE
+    tokenPriceUsd = prices.VERSE || 0
   }
 
-  // If price is 0 or negative (safety protection)
-  if (tokenPriceUsd <= 0) {
-    tokenPriceUsd = 1.0
+  // If live price is not fetched yet (0), return loading state
+  if (tokenPriceUsd <= 0 && symbol !== "USDC") {
+    return {
+      tokenAmount: "Fetching...",
+      rawAmount: 0,
+      rate: 0,
+      formattedRate: "Fetching live price...",
+      isEstimated: true,
+    }
   }
 
   // Number of tokens = invoiceAmount / tokenPriceUsd

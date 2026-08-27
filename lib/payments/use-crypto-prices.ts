@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CryptoPrices, calculateTokenAmount, FALLBACK_PRICES } from "./prices"
+import { CryptoPrices, calculateTokenAmount } from "./prices"
 
 export interface TokenCalculation {
   tokenAmount: string
@@ -16,8 +16,8 @@ export function useCryptoPrices() {
   const [prices, setPrices] = React.useState<CryptoPrices>({
     USD: 1.0,
     USDC: 1.0,
-    POL: FALLBACK_PRICES.POL,
-    VERSE: FALLBACK_PRICES.VERSE,
+    POL: 0,
+    VERSE: 0,
     lastUpdated: 0,
   })
   const [isLoading, setIsLoading] = React.useState<boolean>(true)
@@ -37,9 +37,7 @@ export function useCryptoPrices() {
       console.warn("[useCryptoPrices] Error fetching live prices:", e)
     } finally {
       setIsLoading(false)
-      setTimeout(() => {
-        setIsCalculating(false)
-      }, 350)
+      setIsCalculating(false)
     }
   }, [])
 
@@ -59,24 +57,43 @@ export function useCryptoPrices() {
           rate: 1.0,
           isEstimated: false,
           formattedRate: "$1.00",
-          isCalculating: isCalculating,
+          isCalculating: false,
         }
       }
+
       const res = calculateTokenAmount(numeric, currency, symbol, prices)
+      const symbolUpper = (symbol || "").toUpperCase().trim()
+      const isFetching = (prices.lastUpdated === 0 || isLoading || isCalculating) && symbolUpper !== "USDC" && symbolUpper !== "USD"
+
+      if (isFetching) {
+        return {
+          tokenAmount: "Fetching...",
+          rawAmount: 0,
+          rate: 0,
+          formattedRate: "Fetching live price...",
+          isEstimated: true,
+          isCalculating: true,
+        }
+      }
+
       return {
         ...res,
-        isCalculating: isCalculating,
+        isCalculating,
       }
     },
-    [prices, isCalculating]
+    [prices, isLoading, isCalculating]
   )
 
   return {
     prices,
-    isLoading: isLoading || isCalculating,
+    isLoading,
     isCalculating,
     calculateAmount,
-    refreshPrices: fetchPrices,
+    refreshPrices: () => {
+      setIsLoading(true)
+      setIsCalculating(true)
+      fetchPrices()
+    },
   }
 }
 
