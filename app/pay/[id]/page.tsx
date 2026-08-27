@@ -31,6 +31,8 @@ export default function PublicPayPage() {
   const params = useParams()
   const id = params?.id as string
   const { open } = useAppKit()
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => { setMounted(true) }, [])
   const { address, isConnected } = useAccount()
 
   const [invoice, setInvoice] = React.useState<Invoice | null>(null)
@@ -110,7 +112,7 @@ export default function PublicPayPage() {
             className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Wallet className="w-3.5 h-3.5 text-indigo-600" />
-            <span>{isConnected && address ? formatWalletAddress(address) : "Connect Wallet"}</span>
+            <span>{mounted && isConnected && address ? formatWalletAddress(address) : "Connect Wallet"}</span>
           </button>
         </div>
       </header>

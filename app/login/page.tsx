@@ -30,6 +30,8 @@ function LoginPageContent() {
   const { toast } = useToast()
   const { open } = useAppKit()
   
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => { setMounted(true) }, [])
   const { address, isConnected, chain } = useAccount()
   const { disconnectAsync } = useDisconnect()
   const { signMessageAsync } = useSignMessage()
@@ -73,7 +75,8 @@ function LoginPageContent() {
 
     void checkExistingSession()
 
-    return () => {
+    
+  return () => {
       active = false
     }
   }, [isConnected, address, router, toast])
@@ -206,6 +209,7 @@ function LoginPageContent() {
     }
   }
 
+  
   return (
     <main className="min-h-screen bg-[#fbfcfd] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 text-slate-800 antialiased font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
@@ -242,7 +246,7 @@ function LoginPageContent() {
           )}
 
           {/* Connected wallet banner */}
-          {isConnected && address && (
+          {mounted && isConnected && address && (
             <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
@@ -281,7 +285,7 @@ function LoginPageContent() {
                   <RefreshCw className="h-4.5 w-4.5 shrink-0 animate-spin" />
                   <span>{getButtonText()}</span>
                 </>
-              ) : isConnected ? (
+              ) : mounted && isConnected ? (
                 <>
                   <FileSignature className="h-4.5 w-4.5 shrink-0" />
                   <span>Authorize & Sign In</span>
@@ -296,7 +300,7 @@ function LoginPageContent() {
               )}
             </button>
 
-            {isConnected && !isBusy && (
+            {mounted && isConnected && !isBusy && (
               <button
                 type="button"
                 onClick={() => {
@@ -351,6 +355,7 @@ function LoginPageContent() {
 }
 
 export default function LoginPage() {
+  
   return (
     <React.Suspense fallback={
       <div className="min-h-screen bg-[#fbfcfd] flex items-center justify-center text-slate-400 text-sm font-medium antialiased font-sans">
