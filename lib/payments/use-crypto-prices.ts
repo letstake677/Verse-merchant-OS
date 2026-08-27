@@ -63,25 +63,18 @@ export function useCryptoPrices() {
 
       const res = calculateTokenAmount(numeric, currency, symbol, prices)
       const symbolUpper = (symbol || "").toUpperCase().trim()
-      const isFetching = (prices.lastUpdated === 0 || isLoading || isCalculating) && symbolUpper !== "USDC" && symbolUpper !== "USD"
-
-      if (isFetching) {
-        return {
-          tokenAmount: "Fetching...",
-          rawAmount: 0,
-          rate: 0,
-          formattedRate: "Fetching live price...",
-          isEstimated: true,
-          isCalculating: true,
-        }
-      }
+      const tokenPrice = prices[symbolUpper as keyof CryptoPrices] || 0
+      const isStillCalculating =
+        (tokenPrice <= 0 && symbolUpper !== "USDC" && symbolUpper !== "USD") ||
+        isCalculating ||
+        isLoading
 
       return {
         ...res,
-        isCalculating,
+        isCalculating: isStillCalculating,
       }
     },
-    [prices, isLoading, isCalculating]
+    [prices, isCalculating]
   )
 
   return {

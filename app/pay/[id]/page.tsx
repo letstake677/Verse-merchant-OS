@@ -539,22 +539,50 @@ export default function PublicPayPage() {
                     <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-1">
                       <div className="flex items-center justify-between text-xs text-slate-500">
                         <span className="font-semibold text-slate-700">POL (Native)</span>
-                        <span className="font-mono text-[11px]">${polCalc.rate.toFixed(3)}</span>
+                        <span className="font-mono text-[11px]">
+                          {polCalc.isCalculating || polCalc.rate <= 0 ? (
+                            <span className="animate-pulse text-purple-600 font-sans">Live rate...</span>
+                          ) : (
+                            polCalc.formattedRate
+                          )}
+                        </span>
                       </div>
                       <div className="text-lg font-bold font-mono text-slate-900">
-                        {polCalc.tokenAmount}{" "}
-                        <span className="text-xs font-sans text-slate-500 font-normal">POL</span>
+                        {polCalc.isCalculating || polCalc.rate <= 0 ? (
+                          <span className="text-xs font-normal text-purple-600 animate-pulse flex items-center gap-1 py-1">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Fetching live rate...
+                          </span>
+                        ) : (
+                          <>
+                            {polCalc.tokenAmount}{" "}
+                            <span className="text-xs font-sans text-slate-500 font-normal">POL</span>
+                          </>
+                        )}
                       </div>
                     </div>
 
                     <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-1">
                       <div className="flex items-center justify-between text-xs text-slate-500">
                         <span className="font-semibold text-slate-700">VERSE Token</span>
-                        <span className="font-mono text-[11px]">${verseCalc.rate.toFixed(5)}</span>
+                        <span className="font-mono text-[11px]">
+                          {verseCalc.isCalculating || verseCalc.rate <= 0 ? (
+                            <span className="animate-pulse text-purple-600 font-sans">Live rate...</span>
+                          ) : (
+                            verseCalc.formattedRate
+                          )}
+                        </span>
                       </div>
                       <div className="text-lg font-bold font-mono text-slate-900">
-                        {verseCalc.tokenAmount}{" "}
-                        <span className="text-xs font-sans text-slate-500 font-normal">VERSE</span>
+                        {verseCalc.isCalculating || verseCalc.rate <= 0 ? (
+                          <span className="text-xs font-normal text-purple-600 animate-pulse flex items-center gap-1 py-1">
+                            <Loader2 className="w-3 h-3 animate-spin" /> Fetching live rate...
+                          </span>
+                        ) : (
+                          <>
+                            {verseCalc.tokenAmount}{" "}
+                            <span className="text-xs font-sans text-slate-500 font-normal">VERSE</span>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

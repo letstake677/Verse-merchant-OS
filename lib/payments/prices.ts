@@ -163,13 +163,13 @@ export function calculateTokenAmount(
     tokenPriceUsd = prices.VERSE || 0
   }
 
-  // If live price is not fetched yet (0), return loading state
+  // If live price is not yet available, do not perform baseline estimations
   if (tokenPriceUsd <= 0 && symbol !== "USDC") {
     return {
-      tokenAmount: "Fetching...",
+      tokenAmount: "0",
       rawAmount: 0,
       rate: 0,
-      formattedRate: "Fetching live price...",
+      formattedRate: "Fetching live market rate...",
       isEstimated: true,
     }
   }

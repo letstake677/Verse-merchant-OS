@@ -21,8 +21,8 @@ export async function GET() {
         prices: {
           USD: 1.0,
           USDC: 1.0,
-          POL: 0.38,
-          VERSE: 0.00021,
+          POL: 0,
+          VERSE: 0,
           lastUpdated: Date.now(),
         },
       },

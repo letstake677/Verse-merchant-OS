@@ -392,12 +392,16 @@ export function InvoicePaymentModal({
                 ) : (
                   <button
                     onClick={handlePay}
-                    disabled={isProcessing}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                    disabled={isProcessing || tokenCalc.isCalculating || tokenCalc.rate <= 0}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                   >
                     {isProcessing ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" /> Confirming on Polygon...
+                      </>
+                    ) : tokenCalc.isCalculating || tokenCalc.rate <= 0 ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Fetching live market rate...
                       </>
                     ) : (
                       <>
