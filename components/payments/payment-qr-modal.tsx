@@ -6,7 +6,7 @@ import { Invoice } from "@/lib/invoices/types"
 import { SUPPORTED_PAYMENT_TOKENS, MERCHANT_RECEIVING_ADDRESS } from "@/lib/payments/config"
 import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/web3/config"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
-import { X, Copy, Check, QrCode, RefreshCw, ExternalLink, Loader2 } from "lucide-react"
+import { X, Copy, Check, QrCode, RefreshCw, ExternalLink, Loader2, Printer } from "lucide-react"
 
 interface PaymentQrModalProps {
   invoice: Invoice
@@ -154,6 +154,20 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
                 {copied ? "Copied" : "Copy"}
               </button>
             </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-2 border-t border-slate-100 flex items-center gap-3">
+            <button
+              onClick={() => {
+                if (typeof window !== "undefined") window.print()
+              }}
+              className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors print:hidden shadow-xs"
+              id="print-qr-code-button"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              <span>Print QR Code</span>
+            </button>
           </div>
         </div>
       </div>

@@ -17,6 +17,8 @@ import {
   Sparkles,
   Loader2,
   RefreshCw,
+  Share2,
+  XCircle,
 } from "lucide-react"
 
 import { InvoiceDetailHeader } from "./invoice-detail-header"
@@ -65,6 +67,29 @@ export function InvoiceDetail({
     navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleShare = () => {
+    const url = `${window.location.origin}/pay/${invoice.id}`
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share({
+        title: `Invoice ${invoice.invoiceNumber}`,
+        text: `View and pay invoice ${invoice.invoiceNumber}`,
+        url: url,
+      }).catch((err) => {
+        if (err.name !== "AbortError") {
+          handleCopyLink()
+        }
+      })
+    } else {
+      handleCopyLink()
+    }
+  }
+
+  const handlePrint = () => {
+    if (typeof window !== "undefined") {
+      window.print()
+    }
   }
 
   // Full page cancel handler
@@ -370,31 +395,74 @@ export function InvoiceDetail({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-          <button
-            onClick={handleCopyLink}
-            className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition-colors"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? "Copied Checkout URL" : "Share Pay Link"}
-          </button>
+        <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center gap-2 justify-between print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Copy Link */}
+            <button
+              onClick={handleCopyLink}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              id="modal-copy-link-button"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+              {copied ? "Copied" : "Copy Link"}
+            </button>
+
+            {/* Share */}
+            <button
+              onClick={handleShare}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              id="modal-share-invoice-button"
+            >
+              <Share2 className="w-3.5 h-3.5 text-slate-500" />
+              Share
+            </button>
+
+            {/* Print */}
+            <button
+              onClick={handlePrint}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              id="modal-print-invoice-button"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              Print Receipt
+            </button>
+
+            {/* Cancel Invoice */}
+            {!(isPaid || invoice.status === "cancelled") && (
+              <button
+                onClick={handleCancelInvoice}
+                disabled={isCancelling}
+                className="px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs disabled:opacity-50"
+                id="modal-cancel-invoice-button"
+              >
+                {isCancelling ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 text-red-500" />
+                )}
+                Cancel Invoice
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onQr}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-medium text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              id="modal-qr-code-button"
             >
-              <QrCode className="w-3.5 h-3.5" />
+              <QrCode className="w-3.5 h-3.5 text-slate-500" />
               QR Code
             </button>
             <button
               onClick={onPay}
               disabled={isPaid}
-              className={`px-4 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all ${
+              className={`px-4 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm ${
                 isPaid
                   ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                  : "bg-purple-600 hover:bg-purple-700 text-white shadow-sm"
+                  : "bg-purple-600 hover:bg-purple-700 text-white"
               }`}
+              id="modal-pay-invoice-button"
             >
               <CreditCard className="w-3.5 h-3.5" />
               {isPaid ? "Settled" : "Pay with Web3 Wallet"}

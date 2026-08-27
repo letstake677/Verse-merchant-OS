@@ -13,7 +13,12 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    cpus: 1,
+  },
   webpack: (config) => {
+    config.cache = false;
+    config.devtool = false;
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
