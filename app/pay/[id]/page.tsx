@@ -153,46 +153,8 @@ export default function PublicPayPage() {
       } catch {}
     }
 
-    // If ID looks like INV-0001 or INV-0002, generate sample invoice
-    if (cleanId.toUpperCase().startsWith("INV-0001") || cleanId.toUpperCase() === "DEMO") {
-      const sample: Invoice = {
-        id: cleanId,
-        invoiceNumber: cleanId,
-        customerName: "Acme Web3 Enterprise",
-        customerEmail: "finance@acme.io",
-        total: "1250.00",
-        subtotal: "1250.00",
-        tax: "0.00",
-        currency: "USD",
-        dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
-        paymentAddress: MERCHANT_RECEIVING_ADDRESS,
-        paymentNetwork: "Polygon",
-        chainId: 137,
-        status: "pending",
-        createdAt: new Date().toISOString(),
-        items: [
-          {
-            id: "1",
-            description: "Smart Contract Audit & Merchant Integration",
-            quantity: 1,
-            unitPrice: "1000.00",
-            amount: "1000.00",
-          },
-          {
-            id: "2",
-            description: "Polygon PoS Liquidity Provisioning",
-            quantity: 1,
-            unitPrice: "250.00",
-            amount: "250.00",
-          },
-        ],
-      }
-      setInvoice(sample)
-      setIsLoading(false)
-      return
-    }
-
-    setError("Invoice record not found on the network.")
+    // If invoice not found, report clean error
+    setError("Invoice record not found on the network or has expired.")
     setIsLoading(false)
   }, [id, searchParams])
 
@@ -250,47 +212,6 @@ export default function PublicPayPage() {
     }
   }
 
-  const handleCreateQuickInvoice = () => {
-    const amountVal = parseFloat(customAmount) || 50
-    const cleanId = id ? decodeURIComponent(id).trim() : `INV-${Math.floor(1000 + Math.random() * 9000)}`
-    const newInvoice: Invoice = {
-      id: cleanId,
-      invoiceNumber: cleanId.startsWith("INV-") ? cleanId : `INV-${cleanId.slice(0, 6).toUpperCase()}`,
-      customerName: "Direct Payer",
-      customerEmail: "",
-      total: amountVal.toFixed(2),
-      subtotal: amountVal.toFixed(2),
-      tax: "0.00",
-      currency: "USD",
-      dueDate: new Date().toISOString().split("T")[0],
-      paymentAddress: toChecksumAddress(customMerchantAddress || MERCHANT_RECEIVING_ADDRESS),
-      paymentNetwork: "Polygon",
-      chainId: 137,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      items: [
-        {
-          id: "1",
-          description: customDescription || "Direct Settlement Payment",
-          quantity: 1,
-          unitPrice: amountVal.toFixed(2),
-          amount: amountVal.toFixed(2),
-        },
-      ],
-    }
-
-    setInvoice(newInvoice)
-    setError(null)
-    if (typeof window !== "undefined") {
-      localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(newInvoice))
-    }
-    fetch("/api/invoices/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newInvoice),
-    }).catch(() => {})
-  }
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
@@ -307,107 +228,30 @@ export default function PublicPayPage() {
     )
   }
 
-  // If invoice is still not found, provide a comprehensive interactive recovery UI
+  // If invoice is not found
   if (error || !invoice) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="max-w-lg w-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-300">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-bold">Invoice Not Located</h2>
-                <p className="text-xs text-slate-400 font-mono">ID: {id}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => fetchInvoice()}
-              className="p-2 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-              title="Retry Lookup"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+        <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 mx-auto">
+            <AlertCircle className="w-6 h-6" />
           </div>
 
-          <div className="p-6 space-y-6">
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-1.5 leading-relaxed">
-              <p className="font-semibold text-amber-950 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                Why am I seeing this?
-              </p>
-              <p>
-                The shared invoice link was opened from a separate serverless execution or temporary session. You can immediately initialize a quick payment below or load a demo invoice to test Polygon checkout.
-              </p>
-            </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold text-slate-900">Invoice Not Found</h2>
+            <p className="text-xs text-slate-500">
+              The requested invoice <strong className="font-mono text-slate-700">{id}</strong> could not be located on the network. Please verify the link with the merchant.
+            </p>
+          </div>
 
-            {/* Quick Direct Payment Setup */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                Instant Quick Checkout
-              </h3>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">
-                    Settlement Amount (USD)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="0.01"
-                    value={customAmount}
-                    onChange={(e) => setCustomAmount(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-purple-600"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">
-                    Merchant Receiving Address (Polygon)
-                  </label>
-                  <input
-                    type="text"
-                    value={customMerchantAddress}
-                    onChange={(e) => setCustomMerchantAddress(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600 bg-slate-50/50"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-slate-700 block mb-1">
-                    Payment Reference / Description
-                  </label>
-                  <input
-                    type="text"
-                    value={customDescription}
-                    onChange={(e) => setCustomDescription(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-purple-600"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                <button
-                  onClick={handleCreateQuickInvoice}
-                  className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Proceed to Pay ${customAmount} USD</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setCustomAmount("1250.00")
-                    handleCreateQuickInvoice()
-                  }}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Load Demo ($1,250)</span>
-                </button>
-              </div>
-            </div>
+          <div className="pt-2 flex justify-center">
+            <button
+              onClick={() => fetchInvoice()}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry Lookup</span>
+            </button>
           </div>
         </div>
       </div>

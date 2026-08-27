@@ -14,10 +14,10 @@ export interface PaymentToken {
 }
 
 /**
- * Standard default merchant receiving address with valid EIP-55 checksum.
+ * Standard default fallback merchant address (empty by default to require explicit wallet connection).
  */
 export const DEFAULT_MERCHANT_ADDRESS: `0x${string}` =
-  "0xfc5499252084F7EBdfe7B9Fb7b56a8f08EC4c8Ab"
+  "0x0000000000000000000000000000000000000000"
 
 /**
  * Safely resolves and checksums any EVM address.
@@ -37,7 +37,7 @@ export function toChecksumAddress(raw?: string | null): `0x${string}` {
 }
 
 export const MERCHANT_RECEIVING_ADDRESS: `0x${string}` = toChecksumAddress(
-  process.env.MERCHANT_WALLET || process.env.NEXT_PUBLIC_MERCHANT_WALLET
+  process.env.MERCHANT_WALLET || process.env.NEXT_PUBLIC_MERCHANT_WALLET || ""
 )
 
 export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {

@@ -88,15 +88,23 @@ export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBui
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!isConnected || !address) {
+      setSubmitError("Wallet connection is required. Please connect your Web3 wallet before issuing an invoice.")
+      return
+    }
     if (!customerName.trim()) {
       setSubmitError("Customer name is required.")
+      return
+    }
+    const targetPaymentAddress = (receivingWallet.trim() || address).trim()
+    if (!targetPaymentAddress.startsWith("0x") || targetPaymentAddress.length !== 42) {
+      setSubmitError("Please provide a valid Polygon wallet address (0x...) to receive payments.")
       return
     }
     setIsSubmitting(true)
     setSubmitError(null)
 
     try {
-      const targetPaymentAddress = receivingWallet.trim() || address || MERCHANT_RECEIVING_ADDRESS
       const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
