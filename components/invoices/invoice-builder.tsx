@@ -6,7 +6,6 @@ import { Plus, Trash2, X, Save, ArrowRight, Wallet, AlertCircle } from "lucide-r
 import { useAccount } from "wagmi"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { MERCHANT_RECEIVING_ADDRESS } from "@/lib/payments/config"
 
 interface InvoiceBuilderProps {
   isOpen?: boolean
@@ -20,12 +19,12 @@ export function InvoiceBuilder({ isOpen = true, onClose, onCreated }: InvoiceBui
   const [receivingWallet, setReceivingWallet] = React.useState<string>(address || "")
 
   React.useEffect(() => {
-    if (address && !receivingWallet) {
+    if (address) {
       setReceivingWallet(address)
     }
-  }, [address, receivingWallet])
+  }, [address])
 
-  const merchantAddr = receivingWallet || address || MERCHANT_RECEIVING_ADDRESS
+  const merchantAddr = receivingWallet || address || ""
 
   const handleClose = () => {
     if (onClose) {
