@@ -11,23 +11,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ ok: false, error: "Missing invoice ID" }, { status: 400 })
     }
 
-    const session = await getAuthenticatedSession()
+    const cleanId = decodeURIComponent(id).trim()
     let invoice = null
 
-    if (session) {
-      // First try by database ObjectId, then fallback to invoiceNumber for authenticated merchant
-      invoice = await InvoiceRepository.findByIdForMerchant(id, session.merchantId)
-      
-      if (!invoice) {
-        invoice = await InvoiceRepository.findByMerchantIdAndInvoiceNumber(session.merchantId, id)
-      }
+    // 1. Direct universal lookup (supports both ObjectId, string ID, and invoiceNumber)
+    invoice = await InvoiceRepository.findById(cleanId)
+    if (!invoice) {
+      invoice = await InvoiceRepository.findByInvoiceNumber(cleanId)
     }
 
-    // If no session or not found in merchant scope (e.g. public customer payment checkout /pay/[id])
+    // 2. If not found, check with authenticated session if present
     if (!invoice) {
-      invoice = await InvoiceRepository.findById(id)
-      if (!invoice) {
-        invoice = await InvoiceRepository.findByInvoiceNumber(id)
+      const session = await getAuthenticatedSession()
+      if (session) {
+        invoice = await InvoiceRepository.findByIdForMerchant(cleanId, session.merchantId)
+        if (!invoice) {
+          invoice = await InvoiceRepository.findByMerchantIdAndInvoiceNumber(session.merchantId, cleanId)
+        }
       }
     }
 

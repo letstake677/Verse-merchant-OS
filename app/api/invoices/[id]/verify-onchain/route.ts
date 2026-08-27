@@ -50,7 +50,7 @@ export async function POST(
       )
     }
 
-    const cleanId = id.trim()
+    const cleanId = decodeURIComponent(id).trim()
     let invoice = await InvoiceRepository.findById(cleanId)
     if (!invoice) {
       invoice = await InvoiceRepository.findByInvoiceNumber(cleanId)

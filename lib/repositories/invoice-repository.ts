@@ -39,18 +39,24 @@ export class InvoiceRepository {
     if (!invoiceId) return null
 
     try {
+      const cleanId = decodeURIComponent(invoiceId).trim()
       const collection = await this.getCollection()
       let doc = null
 
-      if (ObjectId.isValid(invoiceId)) {
+      if (ObjectId.isValid(cleanId)) {
         doc = await collection.findOne({
-          _id: new ObjectId(invoiceId),
+          _id: new ObjectId(cleanId),
         })
       }
 
       if (!doc) {
         doc = await collection.findOne({
-          invoiceNumber: invoiceId.trim(),
+          $or: [
+            { _id: cleanId as any },
+            { invoiceNumber: cleanId },
+            { invoiceNumber: { $regex: new RegExp(`^${cleanId}$`, "i") } },
+            { invoiceNumber: `INV-${cleanId.replace(/^inv-?/i, "")}` },
+          ],
         })
       }
 
@@ -58,7 +64,7 @@ export class InvoiceRepository {
       return serializeInvoiceDocument(doc)
     } catch (error) {
       console.error("[InvoiceRepository.findById] Error:", error)
-      throw new Error("Failed to query invoice record.")
+      return null
     }
   }
 
@@ -69,16 +75,21 @@ export class InvoiceRepository {
     if (!invoiceNumber) return null
 
     try {
+      const cleanNumber = decodeURIComponent(invoiceNumber).trim()
       const collection = await this.getCollection()
       const doc = await collection.findOne({
-        invoiceNumber: invoiceNumber.trim(),
+        $or: [
+          { invoiceNumber: cleanNumber },
+          { invoiceNumber: { $regex: new RegExp(`^${cleanNumber}$`, "i") } },
+          { invoiceNumber: `INV-${cleanNumber.replace(/^inv-?/i, "")}` },
+        ],
       })
 
       if (!doc) return null
       return serializeInvoiceDocument(doc)
     } catch (error) {
       console.error("[InvoiceRepository.findByInvoiceNumber] Error:", error)
-      throw new Error("Failed to query invoice by invoice number.")
+      return null
     }
   }
 

@@ -109,10 +109,11 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid }: PaymentQrMo
   }
 
   // Determine actual QR data depending on user preference
+  const targetId = invoice.id || invoice.invoiceNumber
   const checkoutUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/pay/${invoice.invoiceNumber || invoice.id}`
-      : `https://ant-os.vercel.app/pay/${invoice.invoiceNumber || invoice.id}`
+      ? `${window.location.origin}/pay/${targetId}`
+      : `/pay/${targetId}`
 
   let activeQrValue = eip681Uri
   if (qrType === "address") {

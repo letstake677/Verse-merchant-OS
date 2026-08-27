@@ -62,15 +62,42 @@ export function InvoiceDetail({
   const verseCalc = calculateAmount(numericTotal, invoice.currency || "USD", "VERSE")
   const usdcCalc = calculateAmount(numericTotal, invoice.currency || "USD", "USDC")
 
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}/pay/${invoice.id}`
-    navigator.clipboard.writeText(url)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const handleCopyLink = async () => {
+    const targetId = invoice.id || invoice.invoiceNumber
+    const url = `${window.location.origin}/pay/${targetId}`
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(url)
+      } else {
+        const textArea = document.createElement("textarea")
+        textArea.value = url
+        textArea.style.position = "fixed"
+        textArea.style.opacity = "0"
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textArea)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      toast({
+        title: "Link Copied!",
+        description: "Public invoice payment link copied to clipboard.",
+        type: "success",
+      })
+    } catch {
+      toast({
+        title: "Unable to auto-copy",
+        description: `Please copy this link: ${url}`,
+        type: "info",
+      })
+    }
   }
 
   const handleShare = () => {
-    const url = `${window.location.origin}/pay/${invoice.id}`
+    const targetId = invoice.id || invoice.invoiceNumber
+    const url = `${window.location.origin}/pay/${targetId}`
     if (typeof navigator !== "undefined" && navigator.share) {
       navigator.share({
         title: `Invoice ${invoice.invoiceNumber}`,

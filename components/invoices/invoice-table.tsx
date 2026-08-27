@@ -41,12 +41,30 @@ export function InvoiceTable({
 }: InvoiceTableProps) {
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
 
-  const handleCopyLink = (invoice: Invoice, e: React.MouseEvent) => {
+  const handleCopyLink = async (invoice: Invoice, e: React.MouseEvent) => {
     e.stopPropagation()
-    const payUrl = `${window.location.origin}/pay/${invoice.id}`
-    navigator.clipboard.writeText(payUrl)
-    setCopiedId(invoice.id)
-    setTimeout(() => setCopiedId(null), 2000)
+    const targetId = invoice.id || invoice.invoiceNumber
+    const payUrl = `${window.location.origin}/pay/${targetId}`
+    
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(payUrl)
+      } else {
+        const textArea = document.createElement("textarea")
+        textArea.value = payUrl
+        textArea.style.position = "fixed"
+        textArea.style.opacity = "0"
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textArea)
+      }
+      setCopiedId(invoice.id)
+      setTimeout(() => setCopiedId(null), 2000)
+    } catch (err) {
+      console.warn("Clipboard copy failed:", err)
+    }
   }
 
   if (isLoading) {

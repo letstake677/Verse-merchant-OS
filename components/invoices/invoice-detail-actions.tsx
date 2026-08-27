@@ -8,6 +8,7 @@ import { InvoiceStatus } from "@/types/invoice"
 
 interface InvoiceDetailActionsProps {
   invoiceNumber: string
+  invoiceId?: string
   status?: InvoiceStatus
   onEdit?: () => void
   isEditable?: boolean
@@ -30,6 +31,7 @@ function getServerShareSnapshot() {
 
 export function InvoiceDetailActions({
   invoiceNumber,
+  invoiceId,
   status = "draft",
   onEdit,
   isEditable = true,
@@ -42,15 +44,17 @@ export function InvoiceDetailActions({
   const canShare = React.useSyncExternalStore(subscribe, getShareSnapshot, getServerShareSnapshot)
 
   const handleCopyLink = React.useCallback(async () => {
-    if (typeof window === "undefined" || typeof navigator === "undefined") return
+    if (typeof window === "undefined") return
+
+    const payUrl = `${window.location.origin}/pay/${invoiceId || invoiceNumber}`
 
     try {
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-        await navigator.clipboard.writeText(window.location.href)
+        await navigator.clipboard.writeText(payUrl)
       } else {
         // Fallback for environments where clipboard API might be restricted
         const textArea = document.createElement("textarea")
-        textArea.value = window.location.href
+        textArea.value = payUrl
         textArea.style.position = "fixed"
         textArea.style.opacity = "0"
         document.body.appendChild(textArea)
@@ -66,27 +70,29 @@ export function InvoiceDetailActions({
 
       toast({
         title: "Invoice link copied",
-        description: "The invoice link has been copied to your clipboard.",
+        description: "The public checkout link has been copied to your clipboard.",
         type: "success",
       })
     } catch {
       toast({
         title: "Unable to copy link",
-        description: "Please copy the URL from your browser.",
+        description: `Please copy this link: ${payUrl}`,
         type: "error",
       })
     }
-  }, [toast])
+  }, [invoiceId, invoiceNumber, toast])
 
   const handleShare = React.useCallback(async () => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return
+
+    const payUrl = `${window.location.origin}/pay/${invoiceId || invoiceNumber}`
 
     if (navigator.share && typeof navigator.share === "function") {
       try {
         await navigator.share({
           title: `Invoice ${invoiceNumber}`,
-          text: "View this invoice",
-          url: window.location.href,
+          text: "View and pay this invoice",
+          url: payUrl,
         })
       } catch (err: unknown) {
         // If the user cancelled or aborted the share sheet, treat as normal behavior
@@ -100,7 +106,7 @@ export function InvoiceDetailActions({
       // Fallback to copying link when Web Share API is not available
       handleCopyLink()
     }
-  }, [invoiceNumber, handleCopyLink])
+  }, [invoiceNumber, invoiceId, handleCopyLink])
 
   const handlePrint = React.useCallback(() => {
     if (typeof window === "undefined") return
