@@ -10,6 +10,7 @@ export function encodeInvoiceToUrlParam(invoice: Partial<Invoice>): string {
     const compact = {
       id: invoice.id,
       inv: invoice.invoiceNumber,
+      mid: invoice.merchantId,
       cn: invoice.customerName,
       ce: invoice.customerEmail,
       tot: invoice.total,
@@ -17,7 +18,7 @@ export function encodeInvoiceToUrlParam(invoice: Partial<Invoice>): string {
       tax: invoice.tax,
       cur: invoice.currency || "USD",
       due: invoice.dueDate,
-      adr: invoice.paymentAddress,
+      adr: invoice.paymentAddress || (invoice.merchantId?.startsWith("0x") ? invoice.merchantId : ""),
       st: invoice.status || "pending",
       it: (invoice.items || []).map((i) => ({
         id: i.id,

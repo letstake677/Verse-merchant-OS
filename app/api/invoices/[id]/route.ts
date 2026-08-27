@@ -1,8 +1,45 @@
 import { NextRequest, NextResponse } from "next/server"
 import { InvoiceRepository } from "@/lib/repositories/invoice-repository"
 import { getAuthenticatedSession } from "@/lib/auth/session"
+import { getDb } from "@/lib/db/mongodb"
+import { isValidEvmAddress, toChecksumAddress } from "@/lib/payments/config"
+import { ObjectId } from "mongodb"
 
 export const dynamic = "force-dynamic"
+
+async function enrichInvoicePaymentAddress(invoice: any) {
+  if (!invoice) return null
+  const existing = toChecksumAddress(invoice.paymentAddress)
+  if (existing) {
+    return { ...invoice, paymentAddress: existing }
+  }
+
+  // Fallback 1: If merchantId itself is an EVM address (e.g. 0x...)
+  if (invoice.merchantId && isValidEvmAddress(invoice.merchantId)) {
+    return { ...invoice, paymentAddress: toChecksumAddress(invoice.merchantId) }
+  }
+
+  // Fallback 2: Query merchant profile in database
+  if (invoice.merchantId) {
+    try {
+      const db = await getDb()
+      const queryOr: any[] = [{ walletAddress: invoice.merchantId }]
+      if (ObjectId.isValid(invoice.merchantId)) {
+        queryOr.push({ _id: new ObjectId(invoice.merchantId) })
+      } else {
+        queryOr.push({ _id: invoice.merchantId })
+      }
+      const merchantDoc = await db.collection("merchants").findOne({ $or: queryOr })
+      if (merchantDoc?.walletAddress && isValidEvmAddress(merchantDoc.walletAddress)) {
+        return { ...invoice, paymentAddress: toChecksumAddress(merchantDoc.walletAddress) }
+      }
+    } catch (e) {
+      console.error("Failed to enrich invoice merchant wallet:", e)
+    }
+  }
+
+  return invoice
+}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -34,6 +71,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!invoice) {
       return NextResponse.json({ ok: false, error: "Invoice not found" }, { status: 404 })
     }
+
+    invoice = await enrichInvoicePaymentAddress(invoice)
 
     return NextResponse.json({ ok: true, invoice })
   } catch (err) {
