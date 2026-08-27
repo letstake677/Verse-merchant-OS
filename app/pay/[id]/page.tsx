@@ -303,7 +303,7 @@ export default function PublicPayPage() {
               <Zap className="w-4 h-4 fill-white" />
             </div>
             <div>
-              <span className="font-bold text-slate-900 tracking-tight">VersePay Checkout</span>
+              <span className="font-bold text-slate-900 tracking-tight">Verse Merchant OS Checkout</span>
               <span className="hidden sm:inline-block text-[11px] text-slate-400 ml-2 font-medium">
                 Public Settlement Portal
               </span>

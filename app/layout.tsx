@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "VersePay | Web3 Merchant Invoicing & Checkout",
+  title: "Verse Merchant OS | Web3 Merchant Invoicing & Checkout",
   description: "Next-gen Web3 invoicing with automated real-time POL, VERSE, and USDC conversion on Polygon.",
 }
 
