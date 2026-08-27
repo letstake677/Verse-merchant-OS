@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { checkMongoHealth } from "@/lib/db/health"
-import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/payments/config"
+import { POLYGON_MAINNET_CHAIN_ID } from "@/lib/payments/config"
 
 export const dynamic = "force-dynamic"
 
@@ -29,15 +29,11 @@ export async function GET() {
           chainId: POLYGON_MAINNET_CHAIN_ID,
           rpcConfigured: Boolean(process.env.POLYGON_RPC_URL),
         },
-        polygonAmoy: {
-          chainId: POLYGON_AMOY_CHAIN_ID,
-          rpcConfigured: Boolean(process.env.POLYGON_AMOY_RPC_URL),
-        },
       },
     },
   }
 
   return NextResponse.json(response, {
-    status: response.status === "healthy" ? 200 : 200, // Return 200 with degraded state for observability
+    status: response.status === "healthy" ? 200 : 200,
   })
 }

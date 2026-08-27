@@ -7,12 +7,10 @@ import { WagmiProvider } from "wagmi"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import {
   polygon,
-  polygonAmoy,
   mainnet,
   arbitrum,
   base,
   optimism,
-  sepolia,
   type AppKitNetwork,
 } from "@reown/appkit/networks"
 
@@ -96,15 +94,13 @@ export const customWallets = [
   },
 ]
 
-// 2. Define supported networks
+// 2. Define supported networks (Polygon Mainnet primary)
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   polygon,
-  polygonAmoy,
   mainnet,
   arbitrum,
   base,
   optimism,
-  sepolia,
 ]
 
 // 3. Create Wagmi Adapter

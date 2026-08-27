@@ -8,15 +8,6 @@ export const polygon: Chain = {
   blockExplorers: { default: { name: "PolygonScan", url: "https://polygonscan.com" } },
 }
 
-export const polygonAmoy: Chain = {
-  id: 80002,
-  name: "Polygon Amoy",
-  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc-amoy.polygon.technology"] } },
-  blockExplorers: { default: { name: "OKLink", url: "https://www.oklink.com/amoy" } },
-  testnet: true,
-}
-
 export const mainnet: Chain = {
   id: 1,
   name: "Ethereum",
@@ -83,7 +74,6 @@ export interface SupportedChainMeta {
  */
 export const SUPPORTED_CHAINS: readonly [Chain, ...Chain[]] = [
   polygon,
-  polygonAmoy,
   mainnet,
   sepolia,
   arbitrum,

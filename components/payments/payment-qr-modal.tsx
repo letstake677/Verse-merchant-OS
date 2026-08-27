@@ -3,10 +3,25 @@
 import * as React from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { Invoice } from "@/lib/invoices/types"
-import { SUPPORTED_PAYMENT_TOKENS, MERCHANT_RECEIVING_ADDRESS } from "@/lib/payments/config"
-import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/web3/config"
+import {
+  SUPPORTED_PAYMENT_TOKENS,
+  MERCHANT_RECEIVING_ADDRESS,
+  toChecksumAddress,
+  POLYGON_MAINNET_CHAIN_ID,
+} from "@/lib/payments/config"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
-import { X, Copy, Check, QrCode, RefreshCw, ExternalLink, Loader2, Printer } from "lucide-react"
+import { parseUnits } from "viem"
+import {
+  X,
+  Copy,
+  Check,
+  QrCode,
+  RefreshCw,
+  Loader2,
+  Printer,
+  Smartphone,
+  CheckCircle2,
+} from "lucide-react"
 
 interface PaymentQrModalProps {
   invoice: Invoice
@@ -14,16 +29,28 @@ interface PaymentQrModalProps {
   onClose: () => void
 }
 
-export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps) {
-  const [selectedChainId, setSelectedChainId] = React.useState<number>(POLYGON_MAINNET_CHAIN_ID)
-  const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
-  const [copied, setCopied] = React.useState<boolean>(false)
-  const { prices, calculateAmount, refreshPrices, isLoading: pricesLoading, isCalculating } = useCryptoPrices()
+function safeParseBaseUnits(amountStr: string, decimals: number): string {
+  try {
+    const cleaned = amountStr.replace(/,/g, "").trim()
+    const parts = cleaned.split(".")
+    let formatted = parts[0] || "0"
+    if (parts[1]) {
+      formatted += "." + parts[1].slice(0, decimals)
+    }
+    return parseUnits(formatted, decimals).toString()
+  } catch {
+    return "0"
+  }
+}
 
-  const availableTokens =
-    SUPPORTED_PAYMENT_TOKENS[selectedChainId] ||
-    SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] ||
-    []
+export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps) {
+  const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
+  const [qrType, setQrType] = React.useState<"eip681" | "address" | "link">("eip681")
+  const [copied, setCopied] = React.useState<boolean>(false)
+
+  const { calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
+
+  const availableTokens = SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []
 
   const activeToken =
     availableTokens.find((t) => t.symbol.toUpperCase() === selectedSymbol.toUpperCase()) ||
@@ -38,88 +65,159 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
 
   const invoiceAmountNum = parseFloat(invoice.total || "0")
   const tokenCalc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", activeToken.symbol)
-  const recipient = invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS
+  const recipient = toChecksumAddress(invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS)
 
-  // Generate EIP-681 compatible QR standard uri
-  let qrData = ""
+  // Construct standard EIP-681 payment URI with raw integer base units for wallets
+  const baseUnits = safeParseBaseUnits(tokenCalc.tokenAmount, activeToken.decimals)
+
+  let eip681Uri = ""
   if (activeToken.isNative) {
-    // ethereum:0xRecipient@137?value=1.5e17
-    qrData = `ethereum:${recipient}@${selectedChainId}?value=${tokenCalc.tokenAmount}`
+    // Native POL on Polygon (Chain ID 137)
+    eip681Uri = `ethereum:${recipient}@137?value=${baseUnits}`
   } else {
-    // ethereum:0xContract@137/transfer?address=0xRecipient&uint256=1000000
-    qrData = `ethereum:${activeToken.address}@${selectedChainId}/transfer?address=${recipient}&uint256=${tokenCalc.tokenAmount}`
+    // ERC-20 token transfer on Polygon (Chain ID 137)
+    const tokenContract = toChecksumAddress(activeToken.address)
+    eip681Uri = `ethereum:${tokenContract}@137/transfer?address=${recipient}&uint256=${baseUnits}`
   }
 
-  const handleCopy = () => {
+  // Determine actual QR data depending on user preference
+  const checkoutUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/pay/${invoice.invoiceNumber || invoice.id}`
+      : `https://ant-os.vercel.app/pay/${invoice.invoiceNumber || invoice.id}`
+
+  let activeQrValue = eip681Uri
+  if (qrType === "address") {
+    activeQrValue = recipient
+  } else if (qrType === "link") {
+    activeQrValue = checkoutUrl
+  }
+
+  const handleCopyAddress = () => {
     navigator.clipboard.writeText(recipient)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleOpenWalletDeepLink = () => {
+    if (typeof window !== "undefined") {
+      window.location.href = eip681Uri
+    }
   }
 
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-2">
-            <QrCode className="w-5 h-5 text-purple-600" />
-            <h3 className="text-base font-semibold text-slate-900">Scan & Pay</h3>
+            <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+              <QrCode className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Scan & Pay</h3>
+              <p className="text-[11px] text-slate-500">Auto-detects amount & token in mobile wallets</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-5">
+        {/* Scrollable Body */}
+        <div className="p-6 space-y-4 overflow-y-auto">
           {/* Asset Switcher */}
-          <div className="grid grid-cols-3 gap-2">
-            {availableTokens.map((token) => {
-              const calc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", token.symbol)
-              const isSelected = selectedSymbol.toUpperCase() === token.symbol.toUpperCase()
-              return (
-                <button
-                  key={token.symbol}
-                  onClick={() => setSelectedSymbol(token.symbol)}
-                  className={`p-2.5 rounded-xl border text-center transition-all ${
-                    isSelected
-                      ? "border-purple-600 bg-purple-50 text-purple-950 font-bold shadow-sm"
-                      : "border-slate-200 hover:border-slate-300 text-slate-700 font-medium"
-                  }`}
-                >
-                  <div className="text-xs">{token.symbol}</div>
-                  <div className="text-[11px] text-purple-600 font-mono mt-0.5 truncate">
-                    {calc.isCalculating ? "Calculating..." : calc.tokenAmount}
-                  </div>
-                </button>
-              )
-            })}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <span>Select Payment Currency</span>
+              <button
+                onClick={() => refreshPrices()}
+                className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:underline cursor-pointer"
+              >
+                <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
+                Live Rates
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {availableTokens.map((token) => {
+                const calc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", token.symbol)
+                const isSelected = selectedSymbol.toUpperCase() === token.symbol.toUpperCase()
+                return (
+                  <button
+                    key={token.symbol}
+                    onClick={() => setSelectedSymbol(token.symbol)}
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? "border-purple-600 bg-purple-50 text-purple-950 font-bold shadow-sm ring-1 ring-purple-600/30"
+                        : "border-slate-200 hover:border-slate-300 text-slate-700 font-medium"
+                    }`}
+                  >
+                    <div className="text-xs">{token.symbol}</div>
+                    <div className="text-[11px] text-purple-600 font-mono mt-0.5 truncate">
+                      {calc.isCalculating ? "Calculating..." : calc.tokenAmount}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          {/* QR Container */}
-          <div className="flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-200/80">
+          {/* QR Code Presentation Box */}
+          <div className="flex flex-col items-center justify-center p-5 bg-slate-50 rounded-2xl border border-slate-200/80">
+            {/* Format Mode Tabs */}
+            <div className="flex items-center bg-slate-200/80 p-0.5 rounded-lg mb-3.5 text-xs font-medium w-full">
+              <button
+                type="button"
+                onClick={() => setQrType("eip681")}
+                className={`flex-1 py-1 px-2 rounded-md transition-all text-center cursor-pointer ${
+                  qrType === "eip681"
+                    ? "bg-white text-purple-950 font-semibold shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Auto-Fill Pay
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrType("address")}
+                className={`flex-1 py-1 px-2 rounded-md transition-all text-center cursor-pointer ${
+                  qrType === "address"
+                    ? "bg-white text-purple-950 font-semibold shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Address Only
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrType("link")}
+                className={`flex-1 py-1 px-2 rounded-md transition-all text-center cursor-pointer ${
+                  qrType === "link"
+                    ? "bg-white text-purple-950 font-semibold shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Checkout Link
+              </button>
+            </div>
+
+            {/* The SVG QR code */}
             <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100">
               <QRCodeSVG
-                value={qrData}
+                value={activeQrValue}
                 size={180}
                 level="M"
                 includeMargin={false}
-                imageSettings={{
-                  src: "/favicon.ico",
-                  x: undefined,
-                  y: undefined,
-                  height: 24,
-                  width: 24,
-                  excavate: true,
-                }}
               />
             </div>
-            <div className="mt-4 text-center">
+
+            {/* Price / Amount Headline */}
+            <div className="mt-3.5 text-center">
               <div className="text-xl font-mono font-bold text-slate-900">
                 {tokenCalc.isCalculating ? (
                   <span className="inline-flex items-center gap-1 text-sm text-purple-600 font-mono animate-pulse">
@@ -133,13 +231,31 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
                 {tokenCalc.isCalculating ? (
                   "Fetching live Polygon price feed..."
                 ) : (
-                  `≈ $${invoice.total} USD (1 ${activeToken.symbol} = ${tokenCalc.formattedRate})`
+                  `≈ $${invoice.total} USD on Polygon Mainnet (137)`
                 )}
               </div>
             </div>
+
+            {/* EIP-681 Helper Badge */}
+            {qrType === "eip681" && (
+              <div className="mt-2.5 inline-flex items-center gap-1 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2.5 py-1 rounded-full">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Pre-fills {tokenCalc.tokenAmount} {activeToken.symbol} in MetaMask, Trust Wallet & Phantom</span>
+              </div>
+            )}
           </div>
 
-          {/* Wallet Address Copy */}
+          {/* Deep Link Button for Mobile Users */}
+          <button
+            type="button"
+            onClick={handleOpenWalletDeepLink}
+            className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+          >
+            <Smartphone className="w-4 h-4" />
+            <span>Open in Installed Crypto Wallet App</span>
+          </button>
+
+          {/* Merchant Address Section */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Merchant Polygon Receiving Address
@@ -147,8 +263,8 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
             <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
               <span className="font-mono text-xs text-slate-700 truncate flex-1">{recipient}</span>
               <button
-                onClick={handleCopy}
-                className="p-1.5 text-slate-600 hover:text-purple-600 hover:bg-white rounded-lg transition-colors flex items-center gap-1 text-xs font-medium"
+                onClick={handleCopyAddress}
+                className="p-1.5 text-slate-600 hover:text-purple-600 hover:bg-white rounded-lg transition-colors flex items-center gap-1 text-xs font-medium cursor-pointer"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                 {copied ? "Copied" : "Copy"}
@@ -162,11 +278,11 @@ export function PaymentQrModal({ invoice, isOpen, onClose }: PaymentQrModalProps
               onClick={() => {
                 if (typeof window !== "undefined") window.print()
               }}
-              className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors print:hidden shadow-xs"
+              className="w-full py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer print:hidden shadow-xs"
               id="print-qr-code-button"
             >
               <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span>Print QR Code</span>
+              <span>Print QR Payment Code</span>
             </button>
           </div>
         </div>

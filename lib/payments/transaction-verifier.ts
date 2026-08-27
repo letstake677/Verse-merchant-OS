@@ -1,6 +1,6 @@
 import { createPublicClient, http, parseEventLogs, erc20Abi, parseUnits, formatUnits, type Chain } from "viem"
 import { PaymentVerificationSpec, PaymentVerificationResult, ReconciliationOutcome } from "./verification-architecture"
-import { PAYMENT_CONFIRMATION_POLICY, POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "./config"
+import { PAYMENT_CONFIRMATION_POLICY, POLYGON_MAINNET_CHAIN_ID, toChecksumAddress } from "./config"
 
 const polygonChain: Chain = {
   id: POLYGON_MAINNET_CHAIN_ID,
@@ -9,18 +9,10 @@ const polygonChain: Chain = {
   rpcUrls: { default: { http: ["https://polygon-rpc.com"] } },
 }
 
-const polygonAmoyChain: Chain = {
-  id: POLYGON_AMOY_CHAIN_ID,
-  name: "Polygon Amoy",
-  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc-amoy.polygon.technology"] } },
-  testnet: true,
-}
-
 /**
  * Server-Side Polygon Blockchain Payment Verifier
  *
- * Authoritatively verifies on-chain transactions against Polygon Mainnet / Amoy RPC.
+ * Authoritatively verifies on-chain transactions against Polygon Mainnet RPC.
  *
  * Security Invariants:
  * 1. Checks transaction receipt status === "success" (EVM status 1).
@@ -31,15 +23,8 @@ const polygonAmoyChain: Chain = {
  * 6. Fails closed if RPC is unreachable or transaction parameters do not match spec.
  */
 
-// Centralized RPC resolution for Polygon Mainnet and Testnet
-function getRpcUrl(chainId: number): string {
-  if (chainId === POLYGON_AMOY_CHAIN_ID) {
-    return (
-      process.env.POLYGON_AMOY_RPC_URL?.trim() ||
-      "https://rpc-amoy.polygon.technology"
-    )
-  }
-
+// Centralized RPC resolution for Polygon Mainnet
+function getRpcUrl(_chainId?: number): string {
   return (
     process.env.POLYGON_RPC_URL?.trim() ||
     process.env.POLYGON_MAINNET_RPC_URL?.trim() ||
@@ -47,8 +32,7 @@ function getRpcUrl(chainId: number): string {
   )
 }
 
-function getViemChain(chainId: number) {
-  if (chainId === POLYGON_AMOY_CHAIN_ID) return polygonAmoyChain
+function getViemChain(_chainId?: number) {
   return polygonChain
 }
 

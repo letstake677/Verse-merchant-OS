@@ -16,7 +16,6 @@ import {
   Building2,
 } from "lucide-react"
 import { Payment } from "@/types/payment"
-import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/payments/config"
 
 interface PaymentDetailModalProps {
   paymentId: string | null
@@ -123,13 +122,9 @@ export function PaymentDetailModal({
     }
   }
 
-  const getExplorerUrl = (txHash?: string, chainId?: number) => {
+  const getExplorerUrl = (txHash?: string, _chainId?: number) => {
     if (!txHash) return "#"
-    const base =
-      chainId === POLYGON_AMOY_CHAIN_ID
-        ? "https://amoy.polygonscan.com/tx/"
-        : "https://polygonscan.com/tx/"
-    return `${base}${txHash}`
+    return `https://polygonscan.com/tx/${txHash}`
   }
 
   const getStatusBadge = (status: string) => {
@@ -272,9 +267,7 @@ export function PaymentDetailModal({
                     Settlement Network
                   </div>
                   <div className="font-semibold text-slate-800">
-                    {payment.chainId === POLYGON_AMOY_CHAIN_ID
-                      ? "Polygon Amoy Testnet (80002)"
-                      : "Polygon Mainnet (137)"}
+                    Polygon Mainnet (Chain ID 137)
                   </div>
                 </div>
 

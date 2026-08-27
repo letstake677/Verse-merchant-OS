@@ -153,7 +153,7 @@ export function InvoiceDetailSummary({
               <div className="flex items-center justify-between pt-2 border-t border-slate-50">
                 <span className="text-slate-500">Settlement Network</span>
                 <span className="font-medium text-slate-800 text-[11px]">
-                  {payment.chainId === 80002 ? "Polygon Amoy Testnet (80002)" : "Polygon Mainnet (137)"}
+                  Polygon Mainnet (Chain ID 137)
                 </span>
               </div>
 

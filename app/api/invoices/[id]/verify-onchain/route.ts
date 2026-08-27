@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createPublicClient, http, parseAbiItem, decodeEventLog } from "viem"
-import { polygon, polygonAmoy } from "viem/chains"
+import { polygon } from "viem/chains"
 import { ObjectId } from "mongodb"
 import { getDb } from "@/lib/db/mongodb"
 import { InvoiceRepository } from "@/lib/repositories/invoice-repository"
 import { PaymentRepository } from "@/lib/repositories/payment-repository"
 import {
   POLYGON_MAINNET_CHAIN_ID,
-  POLYGON_AMOY_CHAIN_ID,
   resolvePaymentToken,
+  toChecksumAddress,
 } from "@/lib/payments/config"
 import { AppLogger } from "@/lib/observability/logger"
 
@@ -21,18 +21,11 @@ const POLYGON_RPCS = [
   "https://polygon.llamarpc.com",
 ]
 
-function getViemClient(chainId: number) {
-  if (chainId === POLYGON_AMOY_CHAIN_ID) {
-    return createPublicClient({
-      chain: polygonAmoy,
-      transport: http("https://rpc-amoy.polygon.technology"),
-    })
-  }
-
-  // Fallback round-robin or primary Polygon RPC
+function getViemClient(_chainId?: number) {
+  // Primary Polygon Mainnet RPC client
   return createPublicClient({
     chain: polygon,
-    transport: http(POLYGON_RPCS[0]),
+    transport: http(process.env.POLYGON_RPC_URL || POLYGON_RPCS[0]),
   })
 }
 
@@ -50,7 +43,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    if (!id || typeof id !== "string" || !ObjectId.isValid(id.trim())) {
+    if (!id || typeof id !== "string") {
       return NextResponse.json(
         { ok: false, message: "Invalid invoice identifier." },
         { status: 400 }

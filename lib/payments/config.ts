@@ -1,5 +1,6 @@
+import { getAddress } from "viem"
+
 export const POLYGON_MAINNET_CHAIN_ID = 137
-export const POLYGON_AMOY_CHAIN_ID = 80002
 
 export interface PaymentToken {
   symbol: string
@@ -12,9 +13,32 @@ export interface PaymentToken {
   color: string
 }
 
-export const MERCHANT_RECEIVING_ADDRESS: `0x${string}` =
-  (process.env.MERCHANT_WALLET as `0x${string}`) ||
-  "0xFC5499252084f7EbDFe7B9fB7b56A8F08Ec4C8ab"
+/**
+ * Standard default merchant receiving address with valid EIP-55 checksum.
+ */
+export const DEFAULT_MERCHANT_ADDRESS: `0x${string}` =
+  "0xfc5499252084F7EBdfe7B9Fb7b56a8f08EC4c8Ab"
+
+/**
+ * Safely resolves and checksums any EVM address.
+ * Prevents "Address is invalid" runtime exceptions from Viem.
+ */
+export function toChecksumAddress(raw?: string | null): `0x${string}` {
+  if (!raw) return DEFAULT_MERCHANT_ADDRESS
+  const trimmed = raw.trim()
+  try {
+    if (trimmed.startsWith("0x") && trimmed.length === 42) {
+      return getAddress(trimmed.toLowerCase())
+    }
+    return getAddress(trimmed)
+  } catch {
+    return DEFAULT_MERCHANT_ADDRESS
+  }
+}
+
+export const MERCHANT_RECEIVING_ADDRESS: `0x${string}` = toChecksumAddress(
+  process.env.MERCHANT_WALLET || process.env.NEXT_PUBLIC_MERCHANT_WALLET
+)
 
 export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
   [POLYGON_MAINNET_CHAIN_ID]: [
@@ -38,42 +62,23 @@ export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
     {
       symbol: "VERSE",
       name: "Verse Token",
-      address: "0xc708d6f2153933daa50b2d0758955be0a93a8fec", // Verse Token on Polygon
+      address: "0xc708D6F2153933DAA50B2D0758955Be0A93A8FEc", // Verse Token on Polygon (Checksummed)
       decimals: 18,
       chainId: POLYGON_MAINNET_CHAIN_ID,
       color: "violet",
     },
   ],
-  [POLYGON_AMOY_CHAIN_ID]: [
-    {
-      symbol: "POL",
-      name: "Polygon Amoy Test POL",
-      address: "0x0000000000000000000000000000000000000000",
-      decimals: 18,
-      isNative: true,
-      chainId: POLYGON_AMOY_CHAIN_ID,
-      color: "purple",
-    },
-    {
-      symbol: "USDC",
-      name: "Testnet USDC",
-      address: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582",
-      decimals: 6,
-      chainId: POLYGON_AMOY_CHAIN_ID,
-      color: "blue",
-    },
-  ],
 }
 
 export function isSettlementChainSupported(chainId: number): boolean {
-  return chainId === POLYGON_MAINNET_CHAIN_ID || chainId === POLYGON_AMOY_CHAIN_ID
+  return chainId === POLYGON_MAINNET_CHAIN_ID
 }
 
 export function resolvePaymentToken(
   tokenSymbolOrAddress: string,
   chainId: number = POLYGON_MAINNET_CHAIN_ID
 ): PaymentToken | null {
-  const tokens = SUPPORTED_PAYMENT_TOKENS[chainId] || []
+  const tokens = SUPPORTED_PAYMENT_TOKENS[chainId] || SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []
   const query = tokenSymbolOrAddress.trim().toLowerCase()
 
   const found = tokens.find(
@@ -114,4 +119,5 @@ export const PAYMENT_CONFIRMATION_POLICY = {
   requiredConfirmations: 2,
   pollIntervalMs: 3000,
 }
+
 

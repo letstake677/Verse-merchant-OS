@@ -6,8 +6,9 @@ import {
   SUPPORTED_PAYMENT_TOKENS,
   PaymentToken,
   MERCHANT_RECEIVING_ADDRESS,
+  toChecksumAddress,
+  POLYGON_MAINNET_CHAIN_ID,
 } from "@/lib/payments/config"
-import { POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID } from "@/lib/web3/config"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import { useAccount, useSendTransaction, useWriteContract, useSwitchChain, useBalance } from "wagmi"
 import { useAppKit } from "@reown/appkit/react"
@@ -19,10 +20,10 @@ import {
   ExternalLink,
   Coins,
   ArrowRight,
-  TrendingUp,
   RefreshCw,
   X,
   Wallet,
+  ShieldCheck,
 } from "lucide-react"
 
 interface InvoicePaymentModalProps {
@@ -43,18 +44,15 @@ export function InvoicePaymentModal({
   const { switchChain } = useSwitchChain()
   const { prices, calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
 
-  const [selectedChainId, setSelectedChainId] = React.useState<number>(POLYGON_MAINNET_CHAIN_ID)
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
   const [isProcessing, setIsProcessing] = React.useState<boolean>(false)
   const [txHash, setTxHash] = React.useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = React.useState<boolean>(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
 
-  const activeChainId = chainId || selectedChainId
+  const activeChainId = POLYGON_MAINNET_CHAIN_ID
   const availableTokens =
-    SUPPORTED_PAYMENT_TOKENS[activeChainId] ||
-    SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] ||
-    []
+    SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []
 
   const activeToken =
     availableTokens.find((t) => t.symbol.toUpperCase() === selectedSymbol.toUpperCase()) ||
@@ -71,7 +69,8 @@ export function InvoicePaymentModal({
   const tokenCalc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", activeToken.symbol)
 
   const { data: balanceData } = useBalance({
-    address: address,
+    address: address ? toChecksumAddress(address) : undefined,
+    token: activeToken.isNative ? undefined : activeToken.address,
     chainId: activeChainId,
   })
 
@@ -109,13 +108,13 @@ export function InvoicePaymentModal({
     setErrorMessage(null)
 
     try {
-      // Check network
+      // Check and switch to Polygon Mainnet if needed
       if (chainId !== activeChainId && switchChain) {
         await switchChain({ chainId: activeChainId })
       }
 
       let hash = ""
-      const recipient = (invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS) as `0x${string}`
+      const recipient = toChecksumAddress(invoice.paymentAddress || MERCHANT_RECEIVING_ADDRESS)
 
       if (activeToken.isNative) {
         // Native POL payment
@@ -147,7 +146,7 @@ export function InvoicePaymentModal({
           txHash: hash,
           token: activeToken,
           chainId: activeChainId,
-          payerAddress: address,
+          payerAddress: toChecksumAddress(address),
           recipientAddress: recipient,
         }),
       })
@@ -158,16 +157,20 @@ export function InvoicePaymentModal({
       }
     } catch (err: any) {
       console.error("[Payment Error]:", err)
-      setErrorMessage(err?.shortMessage || err?.message || "Transaction failed or was rejected.")
+      const rawMsg = err?.shortMessage || err?.message || ""
+      if (rawMsg.includes("User rejected") || rawMsg.includes("rejected")) {
+        setErrorMessage("Transaction was cancelled in your wallet.")
+      } else if (rawMsg.includes("insufficient funds")) {
+        setErrorMessage(`Insufficient balance in your wallet to complete ${tokenCalc.tokenAmount} ${activeToken.symbol} payment.`)
+      } else {
+        setErrorMessage(rawMsg || "Transaction failed or could not be submitted.")
+      }
     } finally {
       setIsProcessing(false)
     }
   }
 
-  const explorerUrl =
-    activeChainId === POLYGON_AMOY_CHAIN_ID
-      ? `https://amoy.polygonscan.com/tx/${txHash}`
-      : `https://polygonscan.com/tx/${txHash}`
+  const explorerUrl = `https://polygonscan.com/tx/${txHash}`
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -177,7 +180,7 @@ export function InvoicePaymentModal({
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Pay Invoice #{invoice.invoiceNumber}</h3>
             <p className="text-xs text-slate-500">
-              Total Due: ${invoice.total} {invoice.currency} • Real-Time On-Chain Settlement
+              Total Due: ${invoice.total} {invoice.currency} • Real-Time Polygon Settlement
             </p>
           </div>
           <button
@@ -221,53 +224,25 @@ export function InvoicePaymentModal({
             </div>
           ) : (
             <>
-              {/* Network Selector */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <span>1. Network</span>
-                  <span className="text-[11px] text-purple-600 font-medium">Polygon Ecosystem</span>
+              {/* Network Badge (Polygon Mainnet) */}
+              <div className="flex items-center justify-between p-3 bg-purple-50/60 border border-purple-100 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-semibold text-purple-950">Settlement Network:</span>
+                  <span className="text-xs text-purple-900 font-medium">Polygon Mainnet (Chain ID 137)</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedChainId(POLYGON_MAINNET_CHAIN_ID)
-                      if (switchChain && isConnected) switchChain({ chainId: POLYGON_MAINNET_CHAIN_ID })
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      activeChainId === POLYGON_MAINNET_CHAIN_ID
-                        ? "border-purple-600 bg-purple-50/50 shadow-sm"
-                        : "border-slate-200 hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="font-semibold text-sm text-slate-900">Polygon Mainnet</div>
-                    <div className="text-xs text-slate-500">Low fees & instant finality</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedChainId(POLYGON_AMOY_CHAIN_ID)
-                      if (switchChain && isConnected) switchChain({ chainId: POLYGON_AMOY_CHAIN_ID })
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all ${
-                      activeChainId === POLYGON_AMOY_CHAIN_ID
-                        ? "border-purple-600 bg-purple-50/50 shadow-sm"
-                        : "border-slate-200 hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="font-semibold text-sm text-slate-900">Amoy Testnet</div>
-                    <div className="text-xs text-slate-500">Free test faucet tokens</div>
-                  </button>
-                </div>
+                <span className="text-[11px] text-purple-700 font-medium bg-purple-100 px-2 py-0.5 rounded-md">
+                  Instant Finality
+                </span>
               </div>
 
               {/* Token Selector with Live Crypto Rate Breakdown */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <span>2. Payment Asset</span>
+                  <span>Select Payment Asset</span>
                   <button
                     onClick={() => refreshPrices()}
-                    className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-purple-600 transition-colors"
+                    className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-purple-600 transition-colors cursor-pointer"
                   >
                     <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
                     Live Rates
@@ -283,7 +258,7 @@ export function InvoicePaymentModal({
                         key={token.symbol}
                         type="button"
                         onClick={() => setSelectedSymbol(token.symbol)}
-                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
                           isSelected
                             ? "border-purple-600 bg-purple-50/60 ring-2 ring-purple-600/20 shadow-sm"
                             : "border-slate-200 hover:border-slate-300 bg-white"
@@ -346,11 +321,11 @@ export function InvoicePaymentModal({
                     </span>
                   )}
                 </div>
-                {isConnected && formattedBalance && (
-                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                {isConnected && (
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
                     <span>Wallet Balance:</span>
                     <span className="font-medium text-slate-700">
-                      {formattedBalance} {balanceData?.symbol || "POL"}
+                      {formattedBalance !== null ? `${formattedBalance} ${balanceData?.symbol || activeToken.symbol}` : "Loading..."}
                     </span>
                   </div>
                 )}
@@ -369,7 +344,7 @@ export function InvoicePaymentModal({
                 {!isConnected ? (
                   <button
                     onClick={() => open()}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors"
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
                   >
                     <Wallet className="w-4 h-4" /> Connect Wallet to Pay
                   </button>
@@ -377,7 +352,7 @@ export function InvoicePaymentModal({
                   <button
                     onClick={handlePay}
                     disabled={isProcessing}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all"
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                   >
                     {isProcessing ? (
                       <>

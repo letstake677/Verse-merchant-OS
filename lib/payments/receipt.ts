@@ -1,21 +1,14 @@
 import { Payment } from "@/types/payment"
 import { Invoice } from "@/types/invoice"
 import { PaymentReceipt } from "@/types/receipt"
-import { POLYGON_AMOY_CHAIN_ID } from "@/lib/payments/config"
+import { POLYGON_MAINNET_CHAIN_ID } from "@/lib/payments/config"
 
-export function getExplorerTxUrl(txHash: string, chainId: number): string {
+export function getExplorerTxUrl(txHash: string, _chainId?: number): string {
   if (!txHash) return "#"
-  const base =
-    chainId === POLYGON_AMOY_CHAIN_ID
-      ? "https://amoy.polygonscan.com/tx/"
-      : "https://polygonscan.com/tx/"
-  return `${base}${txHash.trim()}`
+  return `https://polygonscan.com/tx/${txHash.trim()}`
 }
 
-export function getNetworkDisplayName(chainId: number): string {
-  if (chainId === POLYGON_AMOY_CHAIN_ID) {
-    return "Polygon Amoy Testnet (Chain #80002)"
-  }
+export function getNetworkDisplayName(_chainId?: number): string {
   return "Polygon Mainnet (Chain #137)"
 }
 
@@ -31,7 +24,7 @@ export function buildCanonicalReceipt(
   invoice: Invoice,
   merchantInfo?: { businessName?: string; displayName?: string; email?: string }
 ): PaymentReceipt {
-  const chainId = payment.chainId || (invoice as any).chainId || 137
+  const chainId = payment.chainId || invoice.chainId || 137
   const networkName = getNetworkDisplayName(chainId)
   const txHash = payment.transactionHash || ""
   const explorerUrl = getExplorerTxUrl(txHash, chainId)
@@ -100,7 +93,7 @@ export function buildCanonicalReceipt(
     taxAmount,
     total,
     notes: invoice.notes,
-    terms: (invoice as any).terms || "",
+    terms: invoice.terms,
     explorerUrl,
   }
 }
