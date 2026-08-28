@@ -21,32 +21,34 @@ export function InvoiceSummary({
 }: InvoiceSummaryProps) {
   const safeInvoices = Array.isArray(invoices) ? invoices : []
 
-  // If explicit metric props are passed (from dashboard/invoices), use them; otherwise calculate from invoices array
-  const totalVolumeNum =
-    outstandingAmount !== undefined && paidAmount !== undefined
-      ? (typeof paidAmount === "string" ? parseFloat(paidAmount.replace(/[^0-9.-]+/g, "")) || 0 : Number(paidAmount) || 0) +
-        (typeof outstandingAmount === "string" ? parseFloat(outstandingAmount.replace(/[^0-9.-]+/g, "")) || 0 : Number(outstandingAmount) || 0)
-      : safeInvoices.reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
+  const parseNum = (val: string | number | undefined): number => {
+    if (val === undefined || val === null) return 0
+    if (typeof val === "number") return isNaN(val) ? 0 : val
+    const clean = String(val).replace(/[^0-9.-]+/g, "")
+    return parseFloat(clean) || 0
+  }
 
-  const paidVolumeDisplay =
+  const paidNum =
     paidAmount !== undefined
-      ? typeof paidAmount === "number"
-        ? `$${paidAmount.toFixed(2)}`
-        : paidAmount
-      : `$${safeInvoices
+      ? parseNum(paidAmount)
+      : safeInvoices
           .filter((inv) => (inv?.status as string)?.toLowerCase() === "paid")
           .reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
-          .toFixed(2)}`
 
-  const pendingVolumeDisplay =
+  const pendingNum =
     outstandingAmount !== undefined
-      ? typeof outstandingAmount === "number"
-        ? `$${outstandingAmount.toFixed(2)}`
-        : outstandingAmount
-      : `$${safeInvoices
-          .filter((inv) => (inv?.status as string)?.toLowerCase() !== "paid")
+      ? parseNum(outstandingAmount)
+      : safeInvoices
+          .filter((inv) => {
+            const st = (inv?.status as string)?.toLowerCase()
+            return st !== "paid" && st !== "cancelled"
+          })
           .reduce((acc, inv) => acc + (parseFloat(inv?.total || "0") || 0), 0)
-          .toFixed(2)}`
+
+  const totalVolumeNum = paidNum + pendingNum
+
+  const paidVolumeDisplay = `$${paidNum.toFixed(2)}`
+  const pendingVolumeDisplay = `$${pendingNum.toFixed(2)}`
 
   const totalCount =
     totalInvoices !== undefined

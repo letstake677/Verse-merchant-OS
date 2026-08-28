@@ -84,8 +84,10 @@ function MerchantDashboardPageContent() {
               setPayments(formatted)
             }
             if (data.summary) {
+              const rawVol = data.summary.totalVolumeUsd || data.summary.totalVolume || "0.00"
+              const cleanVol = typeof rawVol === "string" ? rawVol.replace(/[^0-9.-]+/g, "") || "0.00" : Number(rawVol).toFixed(2)
               setSummary({
-                totalVolumeUsd: data.summary.totalVolumeUsd || "0.00",
+                totalVolumeUsd: cleanVol,
                 confirmedCount: data.summary.confirmedCount || 0,
                 pendingCount: data.summary.pendingCount || 0,
                 failedCount: data.summary.failedCount || 0,

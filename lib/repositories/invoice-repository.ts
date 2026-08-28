@@ -309,12 +309,15 @@ export class InvoiceRepository {
       let paidCents = 0
 
       for (const doc of docs) {
-        if (doc.status === "draft") {
+        const normalizedStatus = (doc.status || "draft").toLowerCase()
+        if (normalizedStatus === "draft") {
           draftCount++
-        } else if (doc.status === "open" || doc.status === "overdue") {
           outstandingCents += parseToCents(doc.total)
-        } else if (doc.status === "paid") {
+        } else if (normalizedStatus === "paid") {
           paidCents += parseToCents(doc.total)
+        } else if (normalizedStatus !== "cancelled") {
+          // "open", "pending", "sent", "overdue" or any active unpaid invoice status
+          outstandingCents += parseToCents(doc.total)
         }
       }
 

@@ -395,6 +395,7 @@ export class PaymentRepository {
     if (!merchantId) {
       return {
         totalVolume: "$0.00",
+        totalVolumeUsd: "0.00",
         totalCount: 0,
         confirmedCount: 0,
         pendingCount: 0,
@@ -408,7 +409,7 @@ export class PaymentRepository {
       const collection = await this.getCollection()
       const payments = await collection
         .find({ merchantId })
-        .project({ amount: 1, status: 1 })
+        .project({ amount: 1, status: 1, invoiceId: 1 })
         .toArray()
 
       let confirmedCents = 0
@@ -417,12 +418,14 @@ export class PaymentRepository {
       let failedCount = 0
       let underpaidCount = 0
       let overpaidCount = 0
+      const paidInvoiceIds = new Set<string>()
 
       for (const p of payments) {
         if (p.status === "confirmed" || p.status === "overpaid") {
           confirmedCount += 1
           if (p.status === "overpaid") overpaidCount += 1
           confirmedCents += parseToCents(p.amount)
+          if (p.invoiceId) paidInvoiceIds.add(p.invoiceId.toString())
         } else if (p.status === "pending" || p.status === "submitted" || p.status === "confirming") {
           pendingCount += 1
         } else if (p.status === "failed") {
@@ -432,9 +435,31 @@ export class PaymentRepository {
         }
       }
 
+      // Cross-reference invoices collection for any paid invoices not recorded in payments
+      try {
+        const invoiceCollection = (await this.getCollection()).db.collection("invoices")
+        const paidInvoices = await invoiceCollection
+          .find({ merchantId, status: "paid" })
+          .project<{ _id: any; id?: string; total: string }>({ _id: 1, id: 1, total: 1 })
+          .toArray()
+
+        for (const inv of paidInvoices) {
+          const invId = inv.id || inv._id?.toString()
+          if (invId && !paidInvoiceIds.has(invId)) {
+            confirmedCents += parseToCents(inv.total)
+            confirmedCount += 1
+          }
+        }
+      } catch {
+        // Safe fallback if secondary collection lookup fails
+      }
+
+      const formattedVal = formatCents(confirmedCents)
+
       return {
-        totalVolume: formatCents(confirmedCents),
-        totalCount: payments.length,
+        totalVolume: `$${formattedVal}`,
+        totalVolumeUsd: formattedVal,
+        totalCount: Math.max(payments.length, confirmedCount),
         confirmedCount,
         pendingCount,
         failedCount,
@@ -445,6 +470,7 @@ export class PaymentRepository {
       console.error("[PaymentRepository.getMerchantPaymentSummary] Error:", error)
       return {
         totalVolume: "$0.00",
+        totalVolumeUsd: "0.00",
         totalCount: 0,
         confirmedCount: 0,
         pendingCount: 0,
