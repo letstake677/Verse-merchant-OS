@@ -343,7 +343,7 @@ export class PaymentRepository {
               status: { $in: ["pending", "submitted", "confirming"] }
             },
             {
-              $set: { status: "failed", updatedAt: new Date() }
+              $set: { status: "cancelled", updatedAt: new Date() }
             }
           )
         }
@@ -459,7 +459,7 @@ export class PaymentRepository {
               status: { $in: ["pending", "submitted", "confirming"] }
             },
             {
-              $set: { status: "failed", updatedAt: new Date() }
+              $set: { status: "cancelled", updatedAt: new Date() }
             }
           )
         }
@@ -479,6 +479,7 @@ export class PaymentRepository {
       let underpaidCount = 0
       let overpaidCount = 0
       const paidInvoiceIds = new Set<string>()
+      const countedPendingInvoiceIds = new Set<string>()
 
       // Pre-fetch all invoice totals for this merchant to translate token amounts to USD
       const invoiceMap = new Map<string, { total: string; status: string }>()
@@ -524,6 +525,7 @@ export class PaymentRepository {
           const isInvoiceAlreadyPaid = linkedInvoice && (linkedInvoice.status === "paid" || linkedInvoice.status === "cancelled" || linkedInvoice.status === "void");
           if (!isInvoiceAlreadyPaid) {
             pendingCount += 1
+            if (invId) countedPendingInvoiceIds.add(invId)
           }
         } else if (p.status === "failed") {
           failedCount += 1
@@ -533,23 +535,22 @@ export class PaymentRepository {
       }
 
       // Cross-reference invoices collection for any paid invoices not recorded in payments
-      try {
-        const invoiceCollection = collection.db.collection("invoices")
-        const paidInvoices = await invoiceCollection
-          .find({ merchantId, status: "paid" })
-          .project<{ _id: any; id?: string; total: string }>({ _id: 1, id: 1, total: 1 })
-          .toArray()
-
-        for (const inv of paidInvoices) {
-          const invId = inv.id || inv._id?.toString()
-          if (invId && !paidInvoiceIds.has(invId)) {
+      // and count active unpaid invoices awaiting payment towards pendingCount
+      for (const [invId, inv] of invoiceMap.entries()) {
+        const normStatus = (inv.status || "draft").toLowerCase()
+        if (normStatus === "paid") {
+          if (!paidInvoiceIds.has(invId)) {
             confirmedCents += parseToCents(inv.total)
             confirmedCount += 1
             paidInvoiceIds.add(invId)
           }
+        } else if (normStatus !== "cancelled" && normStatus !== "void") {
+          // Unpaid invoice awaiting settlement
+          if (!countedPendingInvoiceIds.has(invId)) {
+            pendingCount += 1
+            countedPendingInvoiceIds.add(invId)
+          }
         }
-      } catch {
-        // Safe fallback if secondary collection lookup fails
       }
 
       const formattedVal = formatCents(confirmedCents)
