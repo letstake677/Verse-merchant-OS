@@ -20,6 +20,7 @@ export interface PaymentDocument {
   token: PaymentToken
   amount: string
   currency: string
+  fiatAmount?: string
   payerAddress?: string
   recipientAddress?: string
   transactionHash?: string
@@ -43,6 +44,7 @@ export interface CreatePaymentInput {
   token: PaymentToken
   amount: string
   currency: string
+  fiatAmount?: string
   payerAddress?: string
   recipientAddress?: string
   transactionHash?: string
@@ -83,6 +85,7 @@ export interface PaymentQueryOptions {
  * Transforms a MongoDB PaymentDocument into an application-level Payment contract.
  */
 export function serializePaymentDocument(doc: PaymentDocument): Payment {
+  const tokenSymbol = doc.token?.symbol || "POL"
   return {
     id: doc._id.toHexString(),
     merchantId: doc.merchantId,
@@ -90,15 +93,15 @@ export function serializePaymentDocument(doc: PaymentDocument): Payment {
     status: doc.status,
     chainId: doc.chainId,
     token: {
-      symbol: doc.token?.symbol || "POL",
-      name: doc.token?.name || "Polygon Native",
+      symbol: tokenSymbol,
+      name: doc.token?.name || `${tokenSymbol} Token`,
       isNative: Boolean(doc.token?.isNative),
       decimals: doc.token?.decimals || 18,
       address: doc.token?.address,
       chainId: doc.token?.chainId || doc.chainId,
     },
     amount: doc.amount,
-    currency: doc.currency,
+    currency: doc.currency || "USD",
     payerAddress: doc.payerAddress,
     recipientAddress: doc.recipientAddress,
     transactionHash: doc.transactionHash,
@@ -109,7 +112,7 @@ export function serializePaymentDocument(doc: PaymentDocument): Payment {
     customerName: doc.customerName,
     customerEmail: doc.customerEmail,
     reference: doc.reference,
-    asset: doc.token?.symbol || doc.currency,
-    fiatAmount: doc.amount,
+    asset: tokenSymbol,
+    fiatAmount: doc.fiatAmount,
   }
 }

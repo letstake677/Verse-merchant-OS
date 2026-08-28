@@ -603,6 +603,7 @@ export class PaymentRepository {
       token: input.token,
       amount: input.amount,
       currency: input.currency,
+      fiatAmount: input.fiatAmount,
       payerAddress: input.payerAddress,
       recipientAddress: input.recipientAddress,
       transactionHash: input.transactionHash ? input.transactionHash.toLowerCase() : undefined,

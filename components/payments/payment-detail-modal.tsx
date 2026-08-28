@@ -240,8 +240,13 @@ export function PaymentDetailModal({
                 <div className="text-right">
                   <div className="text-xs text-slate-500 font-medium">Settled Amount</div>
                   <div className="text-lg font-bold text-slate-900">
-                    {payment.amount} {payment.token?.symbol || payment.currency}
+                    {payment.amount} {payment.token?.symbol || payment.asset || "POL"}
                   </div>
+                  {payment.fiatAmount && payment.fiatAmount !== payment.amount && (
+                    <div className="text-xs text-slate-500 font-normal">
+                      ≈ ${payment.fiatAmount} {payment.currency || "USD"}
+                    </div>
+                  )}
                 </div>
               </div>
 

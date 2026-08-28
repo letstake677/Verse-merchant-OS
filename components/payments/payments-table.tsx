@@ -88,12 +88,14 @@ export function PaymentsTable({
 
                 {/* Amount */}
                 <TableCell className="font-semibold text-slate-900 font-tabular text-xs">
-                  {p.amount} {p.currency}
-                  {p.fiatAmount && (
-                    <span className="block text-[10px] text-slate-400 font-normal font-sans">
-                      ≈ {p.fiatAmount}
-                    </span>
-                  )}
+                  <div>
+                    <span className="font-bold">{p.amount} {p.token?.symbol || p.asset || "POL"}</span>
+                    {p.fiatAmount && p.fiatAmount !== p.amount && (
+                      <span className="block text-[10px] text-slate-400 font-normal font-sans">
+                        ≈ ${p.fiatAmount} {p.currency || "USD"}
+                      </span>
+                    )}
+                  </div>
                 </TableCell>
 
                 {/* Asset & PolygonScan Link */}
@@ -123,7 +125,14 @@ export function PaymentsTable({
 
                 {/* Created Date */}
                 <TableCell className="text-xs text-slate-500 whitespace-nowrap">
-                  {p.createdAt}
+                  {p.createdAt && !isNaN(Date.parse(p.createdAt))
+                    ? new Date(p.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : p.createdAt}
                 </TableCell>
 
                 {/* Action */}
@@ -168,18 +177,32 @@ export function PaymentsTable({
               <div>
                 <span className="text-slate-400 block text-[10px]">Amount</span>
                 <span className="font-semibold text-slate-900 font-tabular">
-                  {p.amount} {p.currency}
+                  {p.amount} {p.token?.symbol || p.asset || "POL"}
                 </span>
+                {p.fiatAmount && p.fiatAmount !== p.amount && (
+                  <span className="block text-[10px] text-slate-400 font-normal font-sans">
+                    ≈ ${p.fiatAmount} {p.currency || "USD"}
+                  </span>
+                )}
               </div>
 
               <div>
                 <span className="text-slate-400 block text-[10px]">Asset</span>
-                <span className="font-mono text-slate-700 font-medium">{p.asset}</span>
+                <span className="font-mono text-slate-700 font-medium">{p.token?.symbol || p.asset || "POL"}</span>
               </div>
 
               <div>
                 <span className="text-slate-400 block text-[10px]">Created</span>
-                <span className="text-slate-500">{p.createdAt}</span>
+                <span className="text-slate-500">
+                  {p.createdAt && !isNaN(Date.parse(p.createdAt))
+                    ? new Date(p.createdAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : p.createdAt}
+                </span>
               </div>
             </div>
 

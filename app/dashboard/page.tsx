@@ -76,7 +76,7 @@ function MerchantDashboardPageContent() {
                 customerName: p.customerName || (p.payerAddress ? `${p.payerAddress.slice(0, 6)}...${p.payerAddress.slice(-4)}` : "Customer"),
                 customerEmail: p.customerEmail,
                 amount: p.amount,
-                asset: p.token?.symbol || p.currency || "USDC",
+                asset: p.token?.symbol || p.asset || "VERSE",
                 status: p.status,
                 date: new Date(p.createdAt).toLocaleDateString(),
                 txHash: p.transactionHash,

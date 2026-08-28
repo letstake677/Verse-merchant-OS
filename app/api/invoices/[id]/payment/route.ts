@@ -113,10 +113,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         isNative: token?.isNative ?? false,
       },
       amount: calc.tokenAmount,
-      currency: invoice.currency,
+      currency: invoice.currency || "USD",
+      fiatAmount: invoice.total,
       payerAddress: payerAddress ? toChecksumAddress(payerAddress) : "0x0000000000000000000000000000000000000000",
       recipientAddress: toChecksumAddress(finalRecipient),
-      transactionHash: cleanTxHash
+      transactionHash: cleanTxHash,
+      customerName: invoice.customerName,
+      customerEmail: invoice.customerEmail,
+      reference: `INV-${invoice.invoiceNumber || invoice.id}`,
     })
     
     // Mark invoice as paid only if confirmed on-chain

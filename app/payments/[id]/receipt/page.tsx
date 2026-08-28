@@ -308,7 +308,7 @@ export default function PaymentReceiptPage() {
                 <div className="space-y-1">
                   <span className="text-slate-500 block text-[11px]">Settled Token Asset</span>
                   <span className="font-semibold text-slate-900 block">
-                    {receipt.token.name} ({receipt.token.symbol})
+                    {receipt.settledAmount} {receipt.token.symbol} ({receipt.token.name})
                   </span>
                   {receipt.token.address && (
                     <span className="font-mono text-[10px] text-slate-400 truncate block">
