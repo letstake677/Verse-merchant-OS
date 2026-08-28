@@ -409,7 +409,7 @@ export class PaymentRepository {
       const collection = await this.getCollection()
       const payments = await collection
         .find({ merchantId })
-        .project({ amount: 1, status: 1, invoiceId: 1 })
+        .project({ amount: 1, status: 1, invoiceId: 1, token: 1, currency: 1 })
         .toArray()
 
       let confirmedCents = 0
@@ -420,12 +420,46 @@ export class PaymentRepository {
       let overpaidCount = 0
       const paidInvoiceIds = new Set<string>()
 
+      // Pre-fetch all invoice totals for this merchant to translate token amounts to USD
+      const invoiceMap = new Map<string, { total: string; status: string }>()
+      try {
+        const invoiceCollection = collection.db.collection("invoices")
+        const invoices = await invoiceCollection
+          .find({ merchantId })
+          .project<{ _id: any; id?: string; total: string; status: string }>({ _id: 1, id: 1, total: 1, status: 1 })
+          .toArray()
+
+        for (const inv of invoices) {
+          const invId = inv.id || inv._id?.toString()
+          if (invId) {
+            invoiceMap.set(invId, { total: inv.total, status: inv.status })
+          }
+        }
+      } catch (err) {
+        console.warn("[getMerchantPaymentSummary] Failed to load invoices for translation fallback:", err)
+      }
+
       for (const p of payments) {
+        const invId = p.invoiceId?.toString()
+        const linkedInvoice = invId ? invoiceMap.get(invId) : null
+
+        let usdAmount = p.amount
+        if (linkedInvoice) {
+          usdAmount = linkedInvoice.total
+        } else if (p.token && p.token.symbol !== "USDC" && p.token.symbol !== "USDT" && p.token.symbol !== "USD" && p.currency === "USD") {
+          // If a non-stable payment isn't linked to an invoice, do not sum its token quantity as USD cents
+          usdAmount = "0.00"
+        }
+
         if (p.status === "confirmed" || p.status === "overpaid") {
-          confirmedCount += 1
+          const isNewInvoice = !invId || !paidInvoiceIds.has(invId)
+          
+          if (isNewInvoice) {
+            confirmedCount += 1
+            confirmedCents += parseToCents(usdAmount)
+            if (invId) paidInvoiceIds.add(invId)
+          }
           if (p.status === "overpaid") overpaidCount += 1
-          confirmedCents += parseToCents(p.amount)
-          if (p.invoiceId) paidInvoiceIds.add(p.invoiceId.toString())
         } else if (p.status === "pending" || p.status === "submitted" || p.status === "confirming") {
           pendingCount += 1
         } else if (p.status === "failed") {
@@ -437,7 +471,7 @@ export class PaymentRepository {
 
       // Cross-reference invoices collection for any paid invoices not recorded in payments
       try {
-        const invoiceCollection = (await this.getCollection()).db.collection("invoices")
+        const invoiceCollection = collection.db.collection("invoices")
         const paidInvoices = await invoiceCollection
           .find({ merchantId, status: "paid" })
           .project<{ _id: any; id?: string; total: string }>({ _id: 1, id: 1, total: 1 })
@@ -448,6 +482,7 @@ export class PaymentRepository {
           if (invId && !paidInvoiceIds.has(invId)) {
             confirmedCents += parseToCents(inv.total)
             confirmedCount += 1
+            paidInvoiceIds.add(invId)
           }
         }
       } catch {

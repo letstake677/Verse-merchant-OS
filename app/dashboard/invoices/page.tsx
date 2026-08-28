@@ -203,6 +203,7 @@ export default function InvoicesPage() {
             invoice={selectedInvoice}
             isOpen={isDetailOpen}
             onClose={() => setIsDetailOpen(false)}
+            onInvoiceUpdated={handleRetry}
             onPay={() => {
               setIsDetailOpen(false)
               setIsPayOpen(true)
@@ -225,6 +226,7 @@ export default function InvoicesPage() {
             invoice={selectedInvoice}
             isOpen={isQrOpen}
             onClose={() => setIsQrOpen(false)}
+            onPaid={handleRetry}
           />
         </>
       )}
