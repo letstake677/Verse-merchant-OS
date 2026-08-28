@@ -109,10 +109,28 @@ export function InvoicePaymentModal({
 
   if (!isOpen) return null
 
-  const targetRecipient = toChecksumAddress(invoice.paymentAddress)
+  const rawRecipient =
+    invoice.paymentAddress ||
+    (invoice as any).merchantWalletAddress ||
+    (invoice.merchantId?.startsWith("0x") ? invoice.merchantId : "") ||
+    ""
+  const targetRecipient = toChecksumAddress(rawRecipient)
+  const isRecipientValid = Boolean(targetRecipient && targetRecipient !== "0x0000000000000000000000000000000000000000")
+
+  const isSelfPayment = Boolean(
+    isConnected &&
+    address &&
+    targetRecipient &&
+    address.toLowerCase() === targetRecipient.toLowerCase()
+  )
 
   const handlePay = async () => {
     if (!isConnected || !address) return
+    if (!isRecipientValid || !targetRecipient) {
+      setErrorMessage("Merchant settlement address is missing. Cannot execute payment.")
+      return
+    }
+
     setIsProcessing(true)
     setIsVerifying(false)
     setErrorMessage(null)
@@ -146,10 +164,14 @@ export function InvoicePaymentModal({
         })
       }
 
+      if (!hash) {
+        throw new Error("No transaction hash received from wallet.")
+      }
+
       setTxHash(hash)
       setIsVerifying(true)
 
-      // 1. Submit payment to server
+      // 1. Submit initial payment record to server
       try {
         await fetch(`/api/invoices/${invoice.id}/payment`, {
           method: "POST",
@@ -166,9 +188,10 @@ export function InvoicePaymentModal({
         console.warn("Payment recording notice:", err)
       }
 
-      // 2. Poll on-chain verification endpoint until verified
+      // 2. Poll on-chain verification endpoint until confirmed on Polygon
       let verified = false
-      for (let attempt = 0; attempt < 10; attempt++) {
+      let verifyErrorMsg = ""
+      for (let attempt = 0; attempt < 12; attempt++) {
         try {
           const verifyRes = await fetch(`/api/invoices/${invoice.id}/verify-onchain`, {
             method: "POST",
@@ -183,14 +206,20 @@ export function InvoicePaymentModal({
           if (verifyData.ok && (verifyData.isPaid || verifyData.status === "paid")) {
             verified = true
             break
+          } else if (!verifyData.ok && verifyData.message?.includes("reverted")) {
+            verifyErrorMsg = verifyData.message
+            break
           }
         } catch {
           // Retry on next attempt
         }
-        await new Promise((r) => setTimeout(r, 2500))
+        await new Promise((r) => setTimeout(r, 2000))
       }
 
-      // Even if background RPC had a slight delay, the tx was broadcasted & recorded
+      if (verifyErrorMsg) {
+        throw new Error(verifyErrorMsg)
+      }
+
       setPaymentSuccess(true)
       if (onSuccess) onSuccess()
     } catch (err: any) {
@@ -200,6 +229,8 @@ export function InvoicePaymentModal({
         setErrorMessage("Transaction was cancelled in your wallet.")
       } else if (rawMsg.includes("insufficient funds")) {
         setErrorMessage(`Insufficient balance in your wallet to complete ${tokenCalc.tokenAmount} ${activeToken.symbol} payment.`)
+      } else if (rawMsg.includes("reverted") || rawMsg.includes("execution failed")) {
+        setErrorMessage("Transaction reverted on Polygon blockchain. No tokens were transferred. Please check your token balance and try again.")
       } else {
         setErrorMessage(rawMsg || "Transaction failed or could not be submitted.")
       }
@@ -338,6 +369,28 @@ export function InvoicePaymentModal({
                 </div>
               </div>
 
+              {/* Missing Merchant Recipient Warning */}
+              {!isRecipientValid && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5 text-xs text-amber-800">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">Merchant Settlement Address Missing:</span>
+                    <p className="text-amber-700 mt-0.5">This invoice does not have a designated Polygon receiving address. Payments cannot be executed until the merchant configures a settlement address.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Self-Payment Warning */}
+              {isSelfPayment && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-2.5 text-xs text-blue-800">
+                  <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold">Testing Notice (Self-Transfer):</span>
+                    <p className="text-blue-700 mt-0.5">Your connected wallet ({address?.slice(0, 6)}...{address?.slice(-4)}) is the invoice recipient. Testing this payment will transfer tokens to yourself.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Conversion Summary Callout */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
                 <div className="flex items-center justify-between text-sm">
@@ -347,7 +400,7 @@ export function InvoicePaymentModal({
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-600">Merchant Receiving Wallet</span>
                   <span className="font-mono text-[11px] font-semibold text-slate-800 bg-slate-200/70 px-2 py-0.5 rounded-md">
-                    {targetRecipient.slice(0, 6)}...{targetRecipient.slice(-4)}
+                    {targetRecipient ? `${targetRecipient.slice(0, 6)}...${targetRecipient.slice(-4)}` : "Not Configured"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
@@ -404,8 +457,8 @@ export function InvoicePaymentModal({
                 ) : (
                   <button
                     onClick={handlePay}
-                    disabled={isProcessing || tokenCalc.isCalculating || tokenCalc.rate <= 0}
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                    disabled={!isRecipientValid || isProcessing || tokenCalc.isCalculating || tokenCalc.rate <= 0}
+                    className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                   >
                     {isProcessing ? (
                       <>
@@ -415,6 +468,8 @@ export function InvoicePaymentModal({
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" /> Fetching live market rate...
                       </>
+                    ) : !isRecipientValid ? (
+                      <span>Merchant Address Missing</span>
                     ) : (
                       <>
                         <span>Pay {tokenCalc.tokenAmount} {activeToken.symbol}</span>

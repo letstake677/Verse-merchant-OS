@@ -250,7 +250,12 @@ export default function PublicPayPage() {
     activeQrToken.symbol
   )
 
-  const targetRecipient = toChecksumAddress(invoice.paymentAddress)
+  const rawRecipient =
+    invoice.paymentAddress ||
+    (invoice as any).merchantWalletAddress ||
+    (invoice.merchantId?.startsWith("0x") ? invoice.merchantId : "") ||
+    ""
+  const targetRecipient = toChecksumAddress(rawRecipient)
 
   const tokenBaseUnits = safeParseBaseUnits(
     activeTokenCalc.tokenAmount,
@@ -259,11 +264,13 @@ export default function PublicPayPage() {
 
   // Construct standard EIP-681 Web3 Payment URI for mobile wallets
   let eip681Uri = ""
-  if (activeQrToken.isNative) {
-    eip681Uri = `ethereum:${targetRecipient}@137?value=${tokenBaseUnits}`
-  } else {
-    const tokenContract = toChecksumAddress(activeQrToken.address)
-    eip681Uri = `ethereum:${tokenContract}@137/transfer?address=${targetRecipient}&uint256=${tokenBaseUnits}`
+  if (targetRecipient) {
+    if (activeQrToken.isNative) {
+      eip681Uri = `ethereum:${targetRecipient}@137?value=${tokenBaseUnits}`
+    } else {
+      const tokenContract = toChecksumAddress(activeQrToken.address)
+      eip681Uri = `ethereum:${tokenContract}@137/transfer?address=${targetRecipient}&uint256=${tokenBaseUnits}`
+    }
   }
 
   const publicCheckoutUrl = generatePayUrl(invoice)

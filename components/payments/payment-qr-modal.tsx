@@ -150,7 +150,12 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
 
   const invoiceAmountNum = parseFloat(invoice.total || "0")
   const tokenCalc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", activeToken.symbol)
-  const recipient = toChecksumAddress(invoice.paymentAddress)
+  const rawRecipient =
+    invoice.paymentAddress ||
+    (invoice as any).merchantWalletAddress ||
+    (invoice.merchantId?.startsWith("0x") ? invoice.merchantId : "") ||
+    ""
+  const recipient = toChecksumAddress(rawRecipient)
 
   // Construct standard EIP-681 payment URI with raw integer base units for wallets
   const baseUnits = safeParseBaseUnits(tokenCalc.tokenAmount, activeToken.decimals)

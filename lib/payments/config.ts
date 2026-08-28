@@ -78,7 +78,7 @@ export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
     {
       symbol: "VERSE",
       name: "Verse Token",
-      address: "0xc708D6F2153933DAA50B2D0758955Be0A93A8FEc", // Verse Token on Polygon (Checksummed)
+      address: "0xc708D6F2153933DAA50B2D0758955Be0A93A8FEc", // Verse Token on Polygon
       decimals: 18,
       chainId: POLYGON_MAINNET_CHAIN_ID,
       color: "violet",

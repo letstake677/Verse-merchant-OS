@@ -154,8 +154,13 @@ export class PolygonTransactionVerifier {
         // ERC-20 payment checks (USDC, VERSE)
         const expectedTokenContract = (spec.token.address || "").toLowerCase()
         const actualContract = (tx.to || "").toLowerCase()
+        
+        const isUsdcVariant =
+          spec.token.symbol.toUpperCase() === "USDC" &&
+          (actualContract === "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359" ||
+           actualContract === "0x2791bca1f2de4661ed88a30c99a7a9449aa84174")
 
-        if (actualContract !== expectedTokenContract) {
+        if (actualContract !== expectedTokenContract && !isUsdcVariant) {
           mismatchReason = `Token contract mismatch: expected ${expectedTokenContract}, called ${actualContract}`
         } else {
           // Inspect Transfer logs
@@ -168,7 +173,8 @@ export class PolygonTransactionVerifier {
 
             const matchingLog = transferLogs.find(
               (log) =>
-                log.address.toLowerCase() === expectedTokenContract &&
+                (log.address.toLowerCase() === expectedTokenContract ||
+                 (isUsdcVariant && (log.address.toLowerCase() === "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359" || log.address.toLowerCase() === "0x2791bca1f2de4661ed88a30c99a7a9449aa84174"))) &&
                 log.args.to.toLowerCase() === expectedRecipient
             )
 
