@@ -57,7 +57,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
   const [txError, setTxError] = React.useState<string | null>(null)
   const [isCreatorState, setIsCreatorState] = React.useState<boolean>(isCreator)
 
-  const { calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
+  const { calculateAmount, refreshPrices, secondsRemaining, isLoading: pricesLoading } = useCryptoPrices()
 
   React.useEffect(() => {
     if (!isOpen) return
@@ -235,15 +235,23 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
             <>
               {/* Asset Switcher */}
               <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              <span>Select Payment Currency</span>
-              <button
-                onClick={() => refreshPrices()}
-                className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:underline cursor-pointer"
-              >
-                <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
-                Live Rates
-              </button>
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+              <span className="uppercase tracking-wider">Select Payment Currency</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Rate locked ({secondsRemaining}s)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => refreshPrices()}
+                  className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:underline cursor-pointer"
+                  title="Click to refresh market exchange rates"
+                >
+                  <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
+                  <span>Refresh</span>
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {availableTokens.map((token) => {

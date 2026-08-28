@@ -52,7 +52,7 @@ export function PaymentPreparationModal({
   const currentChainId = useChainId()
   const { connect, connectors, isPending: isConnecting } = useConnect()
   const { switchChain, isPending: isSwitching } = useSwitchChain()
-  const { calculateAmount, refreshPrices, isCalculating } = useCryptoPrices()
+  const { calculateAmount, refreshPrices, secondsRemaining, isLoading: pricesLoading } = useCryptoPrices()
 
   const [copiedMerchant, setCopiedMerchant] = React.useState(false)
   const [copiedPayer, setCopiedPayer] = React.useState(false)
@@ -181,14 +181,21 @@ export function PaymentPreparationModal({
             <label className="block text-xs font-semibold text-slate-700">
               Settlement Asset & Network Configuration:
             </label>
-            <button
-              type="button"
-              onClick={() => refreshPrices()}
-              className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:text-purple-700 font-medium"
-            >
-              <RefreshCw className={`w-3 h-3 ${isCalculating ? "animate-spin" : ""}`} />
-              <span>{isCalculating ? "Updating Rates..." : "Live Market Feed"}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Rate locked ({secondsRemaining}s)
+              </span>
+              <button
+                type="button"
+                onClick={() => refreshPrices()}
+                className="inline-flex items-center gap-1 text-[11px] text-purple-600 hover:text-purple-700 font-medium"
+                title="Click to refresh market rates"
+              >
+                <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {(SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []).map((t) => {

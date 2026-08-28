@@ -12,40 +12,86 @@ export interface TokenCalculation {
   isCalculating: boolean
 }
 
-export function useCryptoPrices() {
-  const [prices, setPrices] = React.useState<CryptoPrices>({
-    USD: 1.0,
-    USDC: 1.0,
-    POL: 0,
-    VERSE: 0,
-    lastUpdated: 0,
-  })
-  const [isLoading, setIsLoading] = React.useState<boolean>(true)
-  const [isCalculating, setIsCalculating] = React.useState<boolean>(true)
+// In-memory module cache to persist prices across component unmounts
+let globalPriceCache: CryptoPrices = {
+  USD: 1.0,
+  USDC: 1.0,
+  POL: 0,
+  VERSE: 0,
+  lastUpdated: 0,
+}
 
-  const fetchPrices = React.useCallback(async () => {
-    setIsCalculating(true)
+export function useCryptoPrices() {
+  const [prices, setPrices] = React.useState<CryptoPrices>(() => globalPriceCache)
+  const [isLoading, setIsLoading] = React.useState<boolean>(() => globalPriceCache.lastUpdated === 0)
+  const [isCalculating, setIsCalculating] = React.useState<boolean>(() => globalPriceCache.lastUpdated === 0)
+  const [secondsRemaining, setSecondsRemaining] = React.useState<number>(30)
+  const isFetchingRef = React.useRef<boolean>(false)
+  const isPausedRef = React.useRef<boolean>(false)
+
+  const fetchPrices = React.useCallback(async (isInitial = false) => {
+    if (isFetchingRef.current || isPausedRef.current) return
+    isFetchingRef.current = true
+
+    // Only set calculating state on initial cold load to prevent UI disruptions
+    if (isInitial && globalPriceCache.lastUpdated === 0) {
+      setIsCalculating(true)
+      setIsLoading(true)
+    }
+
     try {
       const res = await fetch("/api/prices", { cache: "no-store" })
       if (res.ok) {
         const data = await res.json()
         if (data.ok && data.prices) {
+          globalPriceCache = data.prices
           setPrices(data.prices)
+          setSecondsRemaining(30)
         }
       }
     } catch (e) {
       console.warn("[useCryptoPrices] Error fetching live prices:", e)
     } finally {
+      isFetchingRef.current = false
       setIsLoading(false)
       setIsCalculating(false)
     }
   }, [])
 
+  // Initial load once on mount if cache is stale (> 30s)
   React.useEffect(() => {
-    fetchPrices()
-    const interval = setInterval(fetchPrices, 30000) // update every 30 seconds
+    const isStale = Date.now() - globalPriceCache.lastUpdated > 30000
+    if (globalPriceCache.lastUpdated === 0 || isStale) {
+      fetchPrices(globalPriceCache.lastUpdated === 0)
+    }
+  }, [fetchPrices])
+
+  // 30-Second Countdown & Scheduled Rate Refresh Timer
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      if (isPausedRef.current) return
+
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          // Time expired: Trigger silent background update & reset to 30s
+          fetchPrices(false)
+          return 30
+        }
+        return prev - 1
+      })
+    }, 1000)
+
     return () => clearInterval(interval)
   }, [fetchPrices])
+
+  const refreshPrices = React.useCallback(() => {
+    setSecondsRemaining(30)
+    fetchPrices(false)
+  }, [fetchPrices])
+
+  const setPaused = React.useCallback((paused: boolean) => {
+    isPausedRef.current = paused
+  }, [])
 
   const calculateAmount = React.useCallback(
     (amount: number | string, currency = "USD", symbol = "USDC"): TokenCalculation => {
@@ -64,29 +110,25 @@ export function useCryptoPrices() {
       const res = calculateTokenAmount(numeric, currency, symbol, prices)
       const symbolUpper = (symbol || "").toUpperCase().trim()
       const tokenPrice = prices[symbolUpper as keyof CryptoPrices] || 0
-      const isStillCalculating =
-        (tokenPrice <= 0 && symbolUpper !== "USDC" && symbolUpper !== "USD") ||
-        isCalculating ||
-        isLoading
+
+      // Only show calculating if the token price has never been fetched yet (cold start)
+      const isColdStart = (tokenPrice <= 0 && symbolUpper !== "USDC" && symbolUpper !== "USD") && globalPriceCache.lastUpdated === 0
 
       return {
         ...res,
-        isCalculating: isStillCalculating,
+        isCalculating: isColdStart,
       }
     },
-    [prices, isCalculating]
+    [prices]
   )
 
   return {
     prices,
     isLoading,
     isCalculating,
+    secondsRemaining,
     calculateAmount,
-    refreshPrices: () => {
-      setIsLoading(true)
-      setIsCalculating(true)
-      fetchPrices()
-    },
+    refreshPrices,
+    setPaused,
   }
 }
-

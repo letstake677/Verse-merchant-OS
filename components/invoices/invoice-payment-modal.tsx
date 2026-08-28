@@ -42,13 +42,18 @@ export function InvoicePaymentModal({
   const { open } = useAppKit()
   const { address, isConnected, chainId } = useAccount()
   const { switchChain } = useSwitchChain()
-  const { prices, calculateAmount, refreshPrices, isLoading: pricesLoading } = useCryptoPrices()
+  const { calculateAmount, refreshPrices, secondsRemaining, setPaused, isLoading: pricesLoading } = useCryptoPrices()
 
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
   const [isProcessing, setIsProcessing] = React.useState<boolean>(false)
   const [txHash, setTxHash] = React.useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = React.useState<boolean>(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+
+  // Freeze price calculations while transaction is actively being signed / processed
+  React.useEffect(() => {
+    setPaused(isProcessing)
+  }, [isProcessing, setPaused])
 
   const activeChainId = POLYGON_MAINNET_CHAIN_ID
   const availableTokens =
@@ -99,9 +104,8 @@ export function InvoicePaymentModal({
       setErrorMessage(null)
       setIsProcessing(false)
       setIsVerifying(false)
-      refreshPrices()
     }
-  }, [isOpen, refreshPrices])
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -273,15 +277,23 @@ export function InvoicePaymentModal({
 
               {/* Token Selector with Live Crypto Rate Breakdown */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <span>Select Payment Asset</span>
-                  <button
-                    onClick={() => refreshPrices()}
-                    className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-purple-600 transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
-                    Live Rates
-                  </button>
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                  <span className="uppercase tracking-wider">Select Payment Asset</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-100 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Rate locked ({secondsRemaining}s)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => refreshPrices()}
+                      className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-purple-600 transition-colors cursor-pointer"
+                      title="Click to refresh market exchange rates"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2.5">
                   {availableTokens.map((token) => {

@@ -86,7 +86,7 @@ export default function PublicPayPage() {
   const [isQrModalOpen, setIsQrModalOpen] = React.useState(false)
   const [copiedField, setCopiedField] = React.useState<string | null>(null)
 
-  const { calculateAmount, refreshPrices, isCalculating } = useCryptoPrices()
+  const { calculateAmount, refreshPrices, secondsRemaining, isLoading: pricesLoading } = useCryptoPrices()
 
   const fetchInvoice = React.useCallback(async () => {
     if (!id) return
@@ -512,15 +512,23 @@ export default function PublicPayPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h3 className="text-sm font-bold text-slate-900">Supported Polygon Currencies</h3>
-                      <p className="text-xs text-slate-500">Live exchange rates updated automatically</p>
+                      <p className="text-xs text-slate-500">Live exchange rates with 30s price guarantee</p>
                     </div>
-                    <button
-                      onClick={() => refreshPrices()}
-                      className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1.5 font-medium cursor-pointer"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isCalculating ? "animate-spin" : ""}`} />
-                      <span>Refresh Live Rates</span>
-                    </button>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs font-mono text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Rate locked ({secondsRemaining}s)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => refreshPrices()}
+                        className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1.5 font-medium cursor-pointer"
+                        title="Click to refresh market rates"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${pricesLoading ? "animate-spin" : ""}`} />
+                        <span>Refresh</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Token Rate Cards */}
