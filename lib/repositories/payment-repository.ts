@@ -321,6 +321,36 @@ export class PaymentRepository {
 
     try {
       const collection = await this.getCollection()
+
+      // Automatically clean up any stale pending/submitted/confirming payment records
+      // if their parent invoice has already been paid, cancelled, or marked void
+      try {
+        const invoiceCollection = collection.db.collection("invoices")
+        const finalizedInvoices = await invoiceCollection
+          .find({ merchantId, status: { $in: ["paid", "cancelled", "void"] } })
+          .project<{ _id: any; id?: string }>({ _id: 1, id: 1 })
+          .toArray()
+
+        const finalizedInvoiceIds = finalizedInvoices
+          .map((inv) => inv.id || inv._id?.toString())
+          .filter(Boolean) as string[]
+
+        if (finalizedInvoiceIds.length > 0) {
+          await collection.updateMany(
+            {
+              merchantId,
+              invoiceId: { $in: finalizedInvoiceIds },
+              status: { $in: ["pending", "submitted", "confirming"] }
+            },
+            {
+              $set: { status: "failed", updatedAt: new Date() }
+            }
+          )
+        }
+      } catch (err) {
+        console.warn("[PaymentRepository] findPaginatedByMerchantId stale payment cleanup notice:", err)
+      }
+
       const filter: Filter<PaymentDocument> = { merchantId }
 
       if (options.status && options.status !== "all") {
@@ -407,6 +437,36 @@ export class PaymentRepository {
 
     try {
       const collection = await this.getCollection()
+
+      // Automatically clean up any stale pending/submitted/confirming payment records
+      // if their parent invoice has already been paid, cancelled, or marked void
+      try {
+        const invoiceCollection = collection.db.collection("invoices")
+        const finalizedInvoices = await invoiceCollection
+          .find({ merchantId, status: { $in: ["paid", "cancelled", "void"] } })
+          .project<{ _id: any; id?: string }>({ _id: 1, id: 1 })
+          .toArray()
+
+        const finalizedInvoiceIds = finalizedInvoices
+          .map((inv) => inv.id || inv._id?.toString())
+          .filter(Boolean) as string[]
+
+        if (finalizedInvoiceIds.length > 0) {
+          await collection.updateMany(
+            {
+              merchantId,
+              invoiceId: { $in: finalizedInvoiceIds },
+              status: { $in: ["pending", "submitted", "confirming"] }
+            },
+            {
+              $set: { status: "failed", updatedAt: new Date() }
+            }
+          )
+        }
+      } catch (err) {
+        console.warn("[PaymentRepository] getMerchantPaymentSummary stale payment cleanup notice:", err)
+      }
+
       const payments = await collection
         .find({ merchantId })
         .project({ amount: 1, status: 1, invoiceId: 1, token: 1, currency: 1 })
@@ -461,7 +521,10 @@ export class PaymentRepository {
           }
           if (p.status === "overpaid") overpaidCount += 1
         } else if (p.status === "pending" || p.status === "submitted" || p.status === "confirming") {
-          pendingCount += 1
+          const isInvoiceAlreadyPaid = linkedInvoice && (linkedInvoice.status === "paid" || linkedInvoice.status === "cancelled" || linkedInvoice.status === "void");
+          if (!isInvoiceAlreadyPaid) {
+            pendingCount += 1
+          }
         } else if (p.status === "failed") {
           failedCount += 1
         } else if (p.status === "underpaid") {
@@ -494,7 +557,7 @@ export class PaymentRepository {
       return {
         totalVolume: `$${formattedVal}`,
         totalVolumeUsd: formattedVal,
-        totalCount: Math.max(payments.length, confirmedCount),
+        totalCount: confirmedCount + pendingCount + failedCount + underpaidCount + overpaidCount,
         confirmedCount,
         pendingCount,
         failedCount,
