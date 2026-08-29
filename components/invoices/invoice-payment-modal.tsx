@@ -10,7 +10,7 @@ import {
   POLYGON_MAINNET_CHAIN_ID,
 } from "@/lib/payments/config"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
-import { useAccount, useSendTransaction, useWriteContract, useSwitchChain, useBalance } from "wagmi"
+import { useAccount, useSendTransaction, useWriteContract, useSwitchChain, useBalance, useDisconnect } from "wagmi"
 import { useAppKit } from "@reown/appkit/react"
 import { parseUnits, formatUnits, erc20Abi } from "viem"
 import {
@@ -24,6 +24,8 @@ import {
   X,
   Wallet,
   ShieldCheck,
+  LogOut,
+  ArrowLeftRight,
 } from "lucide-react"
 
 interface InvoicePaymentModalProps {
@@ -40,8 +42,9 @@ export function InvoicePaymentModal({
   onSuccess,
 }: InvoicePaymentModalProps) {
   const { open } = useAppKit()
-  const { address, isConnected, chainId } = useAccount()
-  const { switchChain } = useSwitchChain()
+  const { address, isConnected, status, chainId } = useAccount()
+  const { disconnect } = useDisconnect()
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain()
   const { calculateAmount, refreshPrices, secondsRemaining, setPaused, isLoading: pricesLoading } = useCryptoPrices()
 
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
@@ -49,6 +52,9 @@ export function InvoicePaymentModal({
   const [txHash, setTxHash] = React.useState<string | null>(null)
   const [paymentSuccess, setPaymentSuccess] = React.useState<boolean>(false)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+
+  const isWalletConnected = Boolean(isConnected && address && status === "connected")
+  const isWrongChain = Boolean(isWalletConnected && chainId && chainId !== POLYGON_MAINNET_CHAIN_ID)
 
   // Freeze price calculations while transaction is actively being signed / processed
   React.useEffect(() => {
@@ -118,14 +124,18 @@ export function InvoicePaymentModal({
   const isRecipientValid = Boolean(targetRecipient && targetRecipient !== "0x0000000000000000000000000000000000000000")
 
   const isSelfPayment = Boolean(
-    isConnected &&
+    isWalletConnected &&
     address &&
     targetRecipient &&
     address.toLowerCase() === targetRecipient.toLowerCase()
   )
 
   const handlePay = async () => {
-    if (!isConnected || !address) return
+    if (!isWalletConnected || !address) {
+      setErrorMessage("Wallet not connected. Please connect your wallet first.")
+      open()
+      return
+    }
     if (!isRecipientValid || !targetRecipient) {
       setErrorMessage("Merchant settlement address is missing. Cannot execute payment.")
       return
@@ -138,7 +148,11 @@ export function InvoicePaymentModal({
     try {
       // Check and switch to Polygon Mainnet if needed
       if (chainId !== activeChainId && switchChain) {
-        await switchChain({ chainId: activeChainId })
+        try {
+          await switchChain({ chainId: activeChainId })
+        } catch (switchErr: any) {
+          throw new Error("Please switch your wallet network to Polygon Mainnet (Chain ID 137) to continue.")
+        }
       }
 
       let hash = ""
@@ -225,14 +239,20 @@ export function InvoicePaymentModal({
     } catch (err: any) {
       console.error("[Payment Error]:", err)
       const rawMsg = err?.shortMessage || err?.message || ""
-      if (rawMsg.includes("User rejected") || rawMsg.includes("rejected")) {
+      const lower = rawMsg.toLowerCase()
+
+      if (lower.includes("user rejected") || lower.includes("rejected by user") || lower.includes("user denied")) {
         setErrorMessage("Transaction was cancelled in your wallet.")
-      } else if (rawMsg.includes("insufficient funds")) {
-        setErrorMessage(`Insufficient balance in your wallet to complete ${tokenCalc.tokenAmount} ${activeToken.symbol} payment.`)
-      } else if (rawMsg.includes("reverted") || rawMsg.includes("execution failed")) {
+      } else if (lower.includes("insufficient funds") || lower.includes("exceeds balance")) {
+        setErrorMessage(`Insufficient balance in your wallet to complete ${tokenCalc.tokenAmount} ${activeToken.symbol} payment. Also make sure you have a small amount of POL for Polygon gas fees.`)
+      } else if (lower.includes("reverted") || lower.includes("execution failed")) {
         setErrorMessage("Transaction reverted on Polygon blockchain. No tokens were transferred. Please check your token balance and try again.")
+      } else if (lower.includes("rpc") || lower.includes("internal json-rpc") || lower.includes("network error") || lower.includes("failed to fetch") || lower.includes("timeout")) {
+        setErrorMessage("Polygon RPC node busy or response delayed. We have activated our backup RPC cluster. Please click Pay again to retry, or use the QR option.")
+      } else if (lower.includes("switch") || lower.includes("chain")) {
+        setErrorMessage("Please switch your wallet network to Polygon Mainnet (Chain 137).")
       } else {
-        setErrorMessage(rawMsg || "Transaction failed or could not be submitted.")
+        setErrorMessage(rawMsg || "Transaction failed or could not be submitted. Please reconnect your wallet and try again.")
       }
     } finally {
       setIsProcessing(false)
@@ -427,32 +447,93 @@ export function InvoicePaymentModal({
                     </span>
                   )}
                 </div>
-                {isConnected && (
+                {isWalletConnected && (
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <span>Connected:</span>
+                      <span className="font-mono font-semibold text-slate-700">
+                        {address?.slice(0, 6)}...{address?.slice(-4)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => disconnect()}
+                      className="text-[11px] text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer font-medium"
+                    >
+                      <LogOut className="w-3 h-3" />
+                      <span>Change</span>
+                    </button>
+                  </div>
+                )}
+                {isWalletConnected && (
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5">
                     <span>Wallet Balance:</span>
                     <span className="font-medium text-slate-700">
-                      {formattedBalance !== null ? `${formattedBalance} ${balanceData?.symbol || activeToken.symbol}` : "Loading..."}
+                      {formattedBalance !== null ? `${formattedBalance} ${balanceData?.symbol || activeToken.symbol}` : "Checking..."}
                     </span>
                   </div>
                 )}
               </div>
 
+              {/* Wrong Network Warning */}
+              {isWrongChain && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-2.5 text-xs text-amber-900">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Your wallet is on a different network (Chain ID: {chainId}).</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => switchChain && switchChain({ chainId: activeChainId })}
+                    disabled={isSwitchingChain}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-[11px] shrink-0 flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    {isSwitchingChain ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowLeftRight className="w-3 h-3" />}
+                    <span>Switch to Polygon</span>
+                  </button>
+                </div>
+              )}
+
               {/* Error Box */}
               {errorMessage && (
                 <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-700">
                   <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">{errorMessage}</div>
+                  <div className="flex-1 space-y-1">
+                    <div className="font-medium">{errorMessage}</div>
+                    {errorMessage.includes("RPC") && (
+                      <div className="text-[11px] text-rose-600">
+                        Tip: You can also use the <strong>Option 2: Scan QR</strong> on the main invoice page to pay directly from your mobile wallet camera.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Action Buttons */}
               <div className="space-y-3 pt-2">
-                {!isConnected ? (
+                {!isWalletConnected ? (
                   <button
                     onClick={() => open()}
                     className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
                   >
-                    <Wallet className="w-4 h-4" /> Connect Wallet to Pay
+                    <Wallet className="w-4 h-4" /> Connect Web3 Wallet to Pay
+                  </button>
+                ) : isWrongChain ? (
+                  <button
+                    onClick={() => switchChain && switchChain({ chainId: activeChainId })}
+                    disabled={isSwitchingChain}
+                    className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer"
+                  >
+                    {isSwitchingChain ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Switching to Polygon Network...
+                      </>
+                    ) : (
+                      <>
+                        <ArrowLeftRight className="w-4 h-4" /> Switch Network to Polygon (137)
+                      </>
+                    )}
                   </button>
                 ) : (
                   <button

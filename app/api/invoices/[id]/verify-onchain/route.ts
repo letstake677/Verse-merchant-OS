@@ -11,6 +11,7 @@ import {
   toChecksumAddress,
   MERCHANT_RECEIVING_ADDRESS,
 } from "@/lib/payments/config"
+import { getResolvedPolygonRpcUrls } from "@/lib/payments/transaction-verifier"
 import { AppLogger } from "@/lib/observability/logger"
 
 export const dynamic = "force-dynamic"
@@ -129,11 +130,12 @@ export async function POST(
 
       let receipt: any = null
 
-      for (const rpc of POLYGON_RPCS) {
+      const rpcPool = getResolvedPolygonRpcUrls()
+      for (const rpc of rpcPool) {
         try {
           const client = createPublicClient({
             chain: polygon,
-            transport: http(process.env.POLYGON_RPC_URL || rpc, { timeout: 8000 }),
+            transport: http(rpc, { timeout: 8000 }),
           })
           receipt = await client.getTransactionReceipt({
             hash: txHash as `0x${string}`,

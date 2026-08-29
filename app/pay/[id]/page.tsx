@@ -10,7 +10,7 @@ import { InvoicePaymentModal } from "@/components/invoices/invoice-payment-modal
 import { PaymentQrModal } from "@/components/payments/payment-qr-modal"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import { useAppKit } from "@reown/appkit/react"
-import { useAccount } from "wagmi"
+import { useAccount, useDisconnect } from "wagmi"
 import { formatWalletAddress } from "@/lib/utils/wallet"
 import { QRCodeSVG } from "qrcode.react"
 import {
@@ -41,6 +41,7 @@ import {
   HelpCircle,
   Plus,
   Smartphone,
+  LogOut,
 } from "lucide-react"
 
 function safeParseBaseUnits(amountStr: string, decimals: number): string {
@@ -69,7 +70,11 @@ export default function PublicPayPage() {
   React.useEffect(() => {
     setMounted(true)
   }, [])
-  const { address, isConnected } = useAccount()
+  const { address, isConnected, status, isConnecting, isReconnecting } = useAccount()
+  const { disconnect } = useDisconnect()
+
+  const isWalletConnected = Boolean(mounted && isConnected && address && status === "connected")
+  const isWalletConnecting = Boolean(mounted && (isConnecting || isReconnecting || status === "connecting" || status === "reconnecting"))
 
   const [invoice, setInvoice] = React.useState<Invoice | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
@@ -308,13 +313,44 @@ export default function PublicPayPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => open()}
-              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-            >
-              <Wallet className="w-3.5 h-3.5 text-purple-600" />
-              <span>{mounted && isConnected && address ? formatWalletAddress(address) : "Connect Wallet"}</span>
-            </button>
+            {isWalletConnected ? (
+              <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 rounded-xl p-1 pr-2.5">
+                <button
+                  type="button"
+                  onClick={() => open()}
+                  className="px-2 py-1 text-slate-800 text-xs font-semibold flex items-center gap-1.5 hover:text-purple-600 transition-colors cursor-pointer"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>{formatWalletAddress(address || "")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => disconnect()}
+                  title="Disconnect wallet"
+                  className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : isWalletConnecting ? (
+              <button
+                type="button"
+                onClick={() => disconnect()}
+                className="px-3.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                <span>Connecting... (Cancel)</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => open()}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Wallet className="w-3.5 h-3.5 text-purple-600" />
+                <span>Connect Wallet</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -619,13 +655,22 @@ export default function PublicPayPage() {
 
                   {/* Action CTA */}
                   <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
-                    {mounted && isConnected ? (
+                    {isWalletConnected ? (
                       <button
                         onClick={() => setIsPayOpen(true)}
                         className="w-full sm:w-auto flex-1 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
                       >
                         <CreditCard className="w-4 h-4" />
                         <span>Confirm & Pay ${invoice.total} {invoice.currency}</span>
+                      </button>
+                    ) : isWalletConnecting ? (
+                      <button
+                        type="button"
+                        onClick={() => disconnect()}
+                        className="w-full sm:w-auto flex-1 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Connecting to Wallet... (Click to Cancel)</span>
                       </button>
                     ) : (
                       <button

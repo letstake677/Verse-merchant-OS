@@ -1,6 +1,7 @@
 import { getAddress } from "viem"
 
 export const POLYGON_MAINNET_CHAIN_ID = 137
+export const POLYGON_AMOY_CHAIN_ID = 80002
 
 export interface PaymentToken {
   symbol: string
@@ -84,10 +85,29 @@ export const SUPPORTED_PAYMENT_TOKENS: Record<number, PaymentToken[]> = {
       color: "violet",
     },
   ],
+  [POLYGON_AMOY_CHAIN_ID]: [
+    {
+      symbol: "POL",
+      name: "Amoy Testnet POL",
+      address: "0x0000000000000000000000000000000000000000",
+      decimals: 18,
+      isNative: true,
+      chainId: POLYGON_AMOY_CHAIN_ID,
+      color: "purple",
+    },
+    {
+      symbol: "USDC",
+      name: "USD Coin (Amoy Testnet)",
+      address: "0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582", // Common Amoy USDC test token
+      decimals: 6,
+      chainId: POLYGON_AMOY_CHAIN_ID,
+      color: "blue",
+    },
+  ],
 }
 
 export function isSettlementChainSupported(chainId: number): boolean {
-  return chainId === POLYGON_MAINNET_CHAIN_ID
+  return chainId === POLYGON_MAINNET_CHAIN_ID || chainId === POLYGON_AMOY_CHAIN_ID
 }
 
 export function resolvePaymentToken(

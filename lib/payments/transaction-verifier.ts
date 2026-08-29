@@ -1,6 +1,6 @@
-import { createPublicClient, http, parseEventLogs, erc20Abi, parseUnits, formatUnits, type Chain } from "viem"
+import { createPublicClient, http, fallback, parseEventLogs, erc20Abi, parseUnits, formatUnits, type Chain } from "viem"
 import { PaymentVerificationSpec, PaymentVerificationResult, ReconciliationOutcome } from "./verification-architecture"
-import { PAYMENT_CONFIRMATION_POLICY, POLYGON_MAINNET_CHAIN_ID, toChecksumAddress } from "./config"
+import { PAYMENT_CONFIRMATION_POLICY, POLYGON_MAINNET_CHAIN_ID, POLYGON_AMOY_CHAIN_ID, toChecksumAddress } from "./config"
 
 const polygonChain: Chain = {
   id: POLYGON_MAINNET_CHAIN_ID,
@@ -9,30 +9,73 @@ const polygonChain: Chain = {
   rpcUrls: { default: { http: ["https://polygon-rpc.com"] } },
 }
 
-/**
- * Server-Side Polygon Blockchain Payment Verifier
- *
- * Authoritatively verifies on-chain transactions against Polygon Mainnet RPC.
- *
- * Security Invariants:
- * 1. Checks transaction receipt status === "success" (EVM status 1).
- * 2. Checks transaction block height and required block confirmation depth.
- * 3. Checks exact recipient match against merchant's settlement address.
- * 4. Checks exact decimal-safe base unit transfers (BigInt) for native POL and ERC-20 tokens.
- * 5. Decodes ERC-20 `Transfer(address,address,uint256)` event logs to prevent log spoofing.
- * 6. Fails closed if RPC is unreachable or transaction parameters do not match spec.
- */
-
-// Centralized RPC resolution for Polygon Mainnet
-function getRpcUrl(_chainId?: number): string {
-  return (
-    process.env.POLYGON_RPC_URL?.trim() ||
-    process.env.POLYGON_MAINNET_RPC_URL?.trim() ||
-    "https://polygon-rpc.com"
-  )
+const polygonAmoyChain: Chain = {
+  id: POLYGON_AMOY_CHAIN_ID,
+  name: "Polygon Amoy",
+  nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc-amoy.polygon.technology"] } },
 }
 
-function getViemChain(_chainId?: number) {
+const POLYGON_VERIFIER_RPC_POOL = [
+  "https://polygon-bor-rpc.publicnode.com",
+  "https://polygon.llamarpc.com",
+  "https://rpc.ankr.com/polygon",
+  "https://1rpc.io/matic",
+  "https://polygon-mainnet.public.blastapi.io",
+  "https://polygon-rpc.com",
+]
+
+const AMOY_VERIFIER_RPC_POOL = [
+  "https://rpc-amoy.polygon.technology",
+  "https://polygon-amoy.drpc.org",
+  "https://polygon-amoy-bor-rpc.publicnode.com",
+]
+
+/**
+ * Server-Side Polygon / Amoy Blockchain Payment Verifier
+ */
+export function getResolvedPolygonRpcUrls(chainId: number = POLYGON_MAINNET_CHAIN_ID): string[] {
+  const customUrls: string[] = []
+
+  if (chainId === POLYGON_AMOY_CHAIN_ID) {
+    // 1. Amoy custom RPC environment variable
+    const amoyEnv = process.env.AMOY_RPC_URL?.trim() ||
+      process.env.POLYGON_AMOY_RPC_URL?.trim() ||
+      process.env.ALCHEMY_AMOY_URL?.trim() ||
+      process.env.NEXT_PUBLIC_AMOY_RPC_URL?.trim()
+
+    if (amoyEnv) customUrls.push(amoyEnv)
+
+    const alchemyKey = (process.env.ALCHEMY_API_KEY || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)?.trim()
+    if (alchemyKey) {
+      const constructedAmoy = `https://polygon-amoy.g.alchemy.com/v2/${alchemyKey}`
+      if (!customUrls.includes(constructedAmoy)) customUrls.push(constructedAmoy)
+    }
+
+    return [...customUrls, ...AMOY_VERIFIER_RPC_POOL]
+  }
+
+  // Polygon Mainnet
+  const rpcUrl = process.env.POLYGON_RPC_URL?.trim()
+  if (rpcUrl) customUrls.push(rpcUrl)
+
+  const alchemyUrl = process.env.ALCHEMY_POLYGON_URL?.trim()
+  if (alchemyUrl && !customUrls.includes(alchemyUrl)) customUrls.push(alchemyUrl)
+
+  const alchemyKey = (process.env.ALCHEMY_API_KEY || process.env.NEXT_PUBLIC_ALCHEMY_API_KEY)?.trim()
+  if (alchemyKey) {
+    const constructedAlchemy = `https://polygon-mainnet.g.alchemy.com/v2/${alchemyKey}`
+    if (!customUrls.includes(constructedAlchemy)) customUrls.push(constructedAlchemy)
+  }
+
+  const mainnetRpc = process.env.POLYGON_MAINNET_RPC_URL?.trim()
+  if (mainnetRpc && !customUrls.includes(mainnetRpc)) customUrls.push(mainnetRpc)
+
+  return [...customUrls, ...POLYGON_VERIFIER_RPC_POOL]
+}
+
+function getViemChain(chainId?: number) {
+  if (chainId === POLYGON_AMOY_CHAIN_ID) return polygonAmoyChain
   return polygonChain
 }
 
@@ -59,17 +102,21 @@ export class PolygonTransactionVerifier {
       }
     }
 
-    // 2. Resolve RPC URL and create viem public client
-    const rpcUrl = getRpcUrl(spec.chainId)
+    // 2. Create viem public client with multi-RPC fallback
     const chain = getViemChain(spec.chainId)
+    const pool = getResolvedPolygonRpcUrls()
 
     try {
       const publicClient = createPublicClient({
         chain,
-        transport: http(rpcUrl, {
-          timeout: 10_000,
-          retryCount: 2,
-        }),
+        transport: fallback(
+          pool.map((url) =>
+            http(url, {
+              timeout: 10_000,
+              retryCount: 2,
+            })
+          )
+        ),
       })
 
       // 3. Query transaction receipt and transaction body concurrently

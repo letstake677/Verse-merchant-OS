@@ -7,12 +7,14 @@ import { WagmiProvider } from "wagmi"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import {
   polygon,
+  polygonAmoy,
   mainnet,
   arbitrum,
   base,
   optimism,
   type AppKitNetwork,
 } from "@reown/appkit/networks"
+import { http, fallback } from "viem"
 
 // 1. Get Project ID from environment variable or fallback
 export const projectId =
@@ -34,6 +36,43 @@ export const FEATURED_WALLET_IDS = [
   "22522622442c323046be2826569735dce4d28329b128bb9015b7d41775a3f78f", // Rabby
   "191770b94d2d0db7649171e81150f22d3c94a62176435f3d4d3d42875b1192e2", // Ledger
   "2245b35705e0939be56270082d9042bd6ad3840e66b728005d687d310d51d950", // Safe
+]
+
+// Build high-reliability multi-RPC pool for Polygon Mainnet
+const customClientUrls: string[] = []
+const customAmoyUrls: string[] = []
+
+if (typeof process !== "undefined" && process.env) {
+  if (process.env.NEXT_PUBLIC_POLYGON_RPC_URL?.trim()) {
+    customClientUrls.push(process.env.NEXT_PUBLIC_POLYGON_RPC_URL.trim())
+  }
+  if (process.env.NEXT_PUBLIC_ALCHEMY_URL?.trim()) {
+    customClientUrls.push(process.env.NEXT_PUBLIC_ALCHEMY_URL.trim())
+  }
+  if (process.env.NEXT_PUBLIC_ALCHEMY_API_KEY?.trim()) {
+    customClientUrls.push(`https://polygon-mainnet.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY.trim()}`)
+    customAmoyUrls.push(`https://polygon-amoy.g.alchemy.com/v2/${process.env.NEXT_PUBLIC_ALCHEMY_API_KEY.trim()}`)
+  }
+  if (process.env.NEXT_PUBLIC_AMOY_RPC_URL?.trim()) {
+    customAmoyUrls.push(process.env.NEXT_PUBLIC_AMOY_RPC_URL.trim())
+  }
+}
+
+export const POLYGON_RPC_POOL = [
+  ...customClientUrls,
+  "https://polygon-bor-rpc.publicnode.com",
+  "https://polygon.llamarpc.com",
+  "https://rpc.ankr.com/polygon",
+  "https://1rpc.io/matic",
+  "https://polygon-mainnet.public.blastapi.io",
+  "https://polygon-rpc.com",
+]
+
+export const AMOY_RPC_POOL = [
+  ...customAmoyUrls,
+  "https://rpc-amoy.polygon.technology",
+  "https://polygon-amoy.drpc.org",
+  "https://polygon-amoy-bor-rpc.publicnode.com",
 ]
 
 // Fallback wallet definitions for immediate modal population
@@ -94,19 +133,48 @@ export const customWallets = [
   },
 ]
 
-// 2. Define supported networks (Polygon Mainnet primary)
+// 2. Define supported networks (Polygon Mainnet primary, Amoy Testnet supported)
 export const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   polygon,
+  polygonAmoy,
   mainnet,
   arbitrum,
   base,
   optimism,
 ]
 
-// 3. Create Wagmi Adapter
+// 3. Create Wagmi Adapter with fault-tolerant Multi-RPC fallback pool
 export const wagmiAdapter = new WagmiAdapter({
   projectId,
   networks,
+  transports: {
+    [polygon.id]: fallback(
+      POLYGON_RPC_POOL.map((url) =>
+        http(url, {
+          timeout: 10_000,
+          retryCount: 2,
+          retryDelay: 1_000,
+        })
+      )
+    ),
+    [polygonAmoy.id]: fallback(
+      AMOY_RPC_POOL.map((url) =>
+        http(url, {
+          timeout: 10_000,
+          retryCount: 2,
+          retryDelay: 1_000,
+        })
+      )
+    ),
+    [mainnet.id]: fallback([
+      http("https://cloudflare-eth.com"),
+      http("https://rpc.ankr.com/eth"),
+      http("https://eth.llamarpc.com"),
+    ]),
+    [arbitrum.id]: http("https://arb1.arbitrum.io/rpc"),
+    [base.id]: http("https://mainnet.base.org"),
+    [optimism.id]: http("https://mainnet.optimism.io"),
+  },
   ssr: true,
 })
 
