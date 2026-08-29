@@ -207,6 +207,31 @@ export default function PublicPayPage() {
     }
   }
 
+  const [isClaimingPaid, setIsClaimingPaid] = React.useState(false)
+
+  const handleClaimPaid = async () => {
+    if (!invoice) return
+    setIsClaimingPaid(true)
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/claim-paid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tokenSymbol: selectedTokenSymbol,
+          tokenAmount: activeTokenCalc.tokenAmount,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        setInvoice((prev) => (prev ? { ...prev, status: "payment_submitted" } : null))
+      }
+    } catch (err) {
+      console.error("Claim paid error:", err)
+    } finally {
+      setIsClaimingPaid(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
@@ -818,9 +843,24 @@ export default function PublicPayPage() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
-                        <span>Awaiting transaction broadcast on Polygon...</span>
+                      {/* I Have Paid CTA for QR scan users */}
+                      <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                        <button
+                          type="button"
+                          onClick={handleClaimPaid}
+                          disabled={isClaimingPaid}
+                          className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99]"
+                        >
+                          {isClaimingPaid ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4" />
+                          )}
+                          <span>I Have Paid (Notify Merchant)</span>
+                        </button>
+                        <p className="text-[11px] text-slate-500 text-center leading-normal">
+                          QR scan karke payment submit ho gayi? &ldquo;I Have Paid&rdquo; click karein taake merchant ko confirmation notification mil jaye.
+                        </p>
                       </div>
 
                       {/* Mobile Wallet Direct Buttons */}

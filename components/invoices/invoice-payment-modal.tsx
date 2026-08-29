@@ -164,7 +164,7 @@ export function InvoicePaymentModal({
         hash = await sendTransactionAsync({
           to: recipient,
           value: valueInWei,
-          chainId: activeChainId,
+          gas: 60000n,
         })
       } else {
         // ERC-20 payment (USDC, VERSE)
@@ -174,7 +174,7 @@ export function InvoicePaymentModal({
           abi: erc20Abi,
           functionName: "transfer",
           args: [recipient, amountUnits],
-          chainId: activeChainId,
+          gas: 120000n,
         })
       }
 
