@@ -11,7 +11,7 @@
  * within the Payment layer and are referenced optionally via `paymentId`.
  */
 
-export type InvoiceStatus = "draft" | "open" | "paid" | "overdue" | "cancelled"
+export type InvoiceStatus = "draft" | "open" | "payment_submitted" | "paid" | "overdue" | "cancelled"
 
 export interface InvoiceItem {
   id: string

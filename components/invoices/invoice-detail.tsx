@@ -118,6 +118,44 @@ export function InvoiceDetail({
     }
   }
 
+  const [isMarkingReceived, setIsMarkingReceived] = React.useState(false)
+
+  const handleMarkReceived = async () => {
+    setIsMarkingReceived(true)
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/mark-received`, {
+        method: "POST",
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        toast({
+          title: "Payment Confirmed!",
+          description: "Invoice marked as paid successfully.",
+          type: "success",
+        })
+        if (onInvoiceUpdated && data.invoice) {
+          onInvoiceUpdated(data.invoice)
+        } else {
+          window.location.reload()
+        }
+      } else {
+        toast({
+          title: "Action Failed",
+          description: data.error || "Could not mark payment as received.",
+          type: "error",
+        })
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Network error while marking payment as received.",
+        type: "error",
+      })
+    } finally {
+      setIsMarkingReceived(false)
+    }
+  }
+
   // Full page cancel handler
   const handleCancelInvoice = async () => {
     if (isCancelling) return
@@ -172,6 +210,30 @@ export function InvoiceDetail({
           onPayInvoice={invoice.status === "open" || invoice.status === "overdue" ? () => setIsPayOpen(true) : undefined}
           onShowQR={() => setIsQrOpen(true)}
         />
+
+        {invoice.status === "payment_submitted" && (
+          <div className="p-4 bg-amber-50/90 rounded-2xl border border-amber-300 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <Clock className="w-5 h-5 animate-spin" />
+              </div>
+              <div className="space-y-0.5">
+                <h4 className="text-sm font-bold text-amber-950">Customer Marked Payment as Submitted (&ldquo;I Have Paid&rdquo;)</h4>
+                <p className="text-xs text-amber-800">
+                  Customer has transferred funds. Please verify your Polygon wallet and click below to confirm.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleMarkReceived}
+              disabled={isMarkingReceived}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all shrink-0 cursor-pointer"
+            >
+              {isMarkingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              <span>Confirm & Mark as Paid</span>
+            </button>
+          </div>
+        )}
 
         {/* 2-Column Desktop Grid, 1-Column Mobile Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">

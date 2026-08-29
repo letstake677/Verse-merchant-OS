@@ -73,7 +73,7 @@ export default function PublicPayPage() {
   const { address, isConnected, status, isConnecting, isReconnecting } = useAccount()
   const { disconnect } = useDisconnect()
 
-  const isWalletConnected = Boolean(mounted && isConnected && address && status === "connected")
+  const isWalletConnected = Boolean(mounted && address && (isConnected || status === "connected"))
   const isWalletConnecting = Boolean(mounted && (isConnecting || isReconnecting || status === "connecting" || status === "reconnecting"))
 
   const [invoice, setInvoice] = React.useState<Invoice | null>(null)
@@ -254,6 +254,7 @@ export default function PublicPayPage() {
   }
 
   const isPaid = invoice.status === "paid"
+  const isSubmitted = invoice.status === "payment_submitted"
   const numericTotal = parseFloat(invoice.total || "0")
   const polCalc = calculateAmount(numericTotal, invoice.currency || "USD", "POL")
   const verseCalc = calculateAmount(numericTotal, invoice.currency || "USD", "VERSE")
@@ -491,6 +492,27 @@ export default function PublicPayPage() {
                     <Copy className="w-3.5 h-3.5" />
                   )}
                   <span>{copiedField === "receipt_link" ? "Link Copied" : "Copy Receipt Link"}</span>
+                </button>
+              </div>
+            </div>
+          ) : isSubmitted ? (
+            <div className="p-6 md:p-8 space-y-6 text-center bg-amber-50/50">
+              <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto shadow-xs">
+                <Clock className="w-9 h-9 animate-spin" />
+              </div>
+              <div className="space-y-2 max-w-md mx-auto">
+                <h3 className="text-2xl font-bold text-slate-900">Payment Submitted!</h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Aapki payment claim notification merchant ko bhej di gayi hai. Merchant ab apne dashboard se verification karke status <strong className="text-emerald-700">Paid</strong> mark kar dein gey.
+                </p>
+              </div>
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-3 print:hidden">
+                <button
+                  onClick={handlePrint}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print Invoice Copy
                 </button>
               </div>
             </div>

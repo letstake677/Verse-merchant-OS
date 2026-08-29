@@ -6,7 +6,16 @@ export interface InvoiceItem {
   amount: string
 }
 
-export type InvoiceStatus = "draft" | "sent" | "pending" | "paid" | "overdue" | "cancelled"
+export type InvoiceStatus = "draft" | "sent" | "open" | "pending" | "payment_submitted" | "paid" | "overdue" | "cancelled"
+
+export interface InvoicePaymentClaim {
+  claimedAt: string
+  tokenSymbol: string
+  tokenAmount: string
+  txHash?: string
+  payerWallet?: string
+  customerNote?: string
+}
 
 export interface InvoicePayment {
   id: string
@@ -48,6 +57,7 @@ export interface Invoice {
   paymentNetwork: string
   chainId: number
   payments?: InvoicePayment[]
+  paymentClaim?: InvoicePaymentClaim
   paidAt?: string
 }
 

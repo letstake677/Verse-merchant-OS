@@ -129,6 +129,7 @@ export function InvoiceTable({
           <tbody className="divide-y divide-slate-100 text-sm">
             {invoices.map((invoice) => {
               const isPaid = invoice.status === "paid"
+              const isSubmitted = invoice.status === "payment_submitted"
               return (
                 <tr
                   key={invoice.id}
@@ -153,22 +154,44 @@ export function InvoiceTable({
                   </td>
                   <td className="py-4 px-5">
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                         isPaid
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                          : isSubmitted
+                          ? "bg-amber-100 text-amber-900 border border-amber-300 animate-pulse"
                           : "bg-amber-50 text-amber-700 border border-amber-200/60"
                       }`}
                     >
-                      {isPaid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                      {isPaid ? "Paid" : "Pending"}
+                      {isPaid ? (
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      ) : isSubmitted ? (
+                        <Clock className="w-3.5 h-3.5 text-amber-700" />
+                      ) : (
+                        <Clock className="w-3.5 h-3.5" />
+                      )}
+                      {isPaid ? "Paid" : isSubmitted ? "Payment Claimed" : "Pending"}
                     </span>
                   </td>
                   <td className="py-4 px-5 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1.5">
+                      {isSubmitted && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/mark-received`, { method: "POST" })
+                              if (res.ok) window.location.reload()
+                            } catch {}
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                          title="Click to confirm customer payment claim"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Confirm Pay
+                        </button>
+                      )}
                       <button
                         onClick={(e) => handleCopyLink(invoice, e)}
                         title="Copy Checkout Link"
-                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                       >
                         {copiedId === invoice.id ? (
                           <Check className="w-4 h-4 text-emerald-600" />

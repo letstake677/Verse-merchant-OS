@@ -51,6 +51,8 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
   const [qrType, setQrType] = React.useState<"eip681" | "address">("eip681")
   const [copied, setCopied] = React.useState<boolean>(false)
   const [isDetectedPaid, setIsDetectedPaid] = React.useState<boolean>(invoice.status === "paid")
+  const [isClaimSubmitted, setIsClaimSubmitted] = React.useState<boolean>(invoice.status === "payment_submitted")
+  const [isClaimingPaid, setIsClaimingPaid] = React.useState<boolean>(false)
   const [manualTxHash, setManualTxHash] = React.useState<string>("")
   const [isVerifyingTx, setIsVerifyingTx] = React.useState<boolean>(false)
   const [isMarkingReceived, setIsMarkingReceived] = React.useState<boolean>(false)
@@ -58,6 +60,11 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
   const [isCreatorState, setIsCreatorState] = React.useState<boolean>(isCreator)
 
   const { calculateAmount, refreshPrices, secondsRemaining, isLoading: pricesLoading } = useCryptoPrices()
+
+  React.useEffect(() => {
+    setIsDetectedPaid(invoice.status === "paid")
+    setIsClaimSubmitted(invoice.status === "payment_submitted")
+  }, [invoice.status])
 
   React.useEffect(() => {
     if (!isOpen) return
@@ -74,6 +81,33 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
       })
       .catch(() => {})
   }, [isOpen, isCreator])
+
+  const handleClaimPaid = async () => {
+    setIsClaimingPaid(true)
+    setTxError(null)
+    try {
+      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/claim-paid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tokenSymbol: selectedSymbol,
+          tokenAmount: tokenCalc.tokenAmount,
+          txHash: manualTxHash.trim() || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        setIsClaimSubmitted(true)
+        if (onPaid) onPaid()
+      } else {
+        setTxError(data.error || "Failed to submit payment claim.")
+      }
+    } catch {
+      setTxError("Network error while submitting payment claim.")
+    } finally {
+      setIsClaimingPaid(false)
+    }
+  }
 
   const handleMarkReceived = async () => {
     setIsMarkingReceived(true)
@@ -241,6 +275,24 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
                   className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-medium text-sm transition-colors"
                 >
                   Close Receipt
+                </button>
+              </div>
+            </div>
+          ) : isClaimSubmitted ? (
+            <div className="text-center py-6 space-y-4">
+              <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                <Clock className="w-10 h-10 animate-spin" />
+              </div>
+              <h4 className="text-xl font-bold text-slate-900">Payment Submitted!</h4>
+              <p className="text-sm text-slate-600 max-w-xs mx-auto">
+                Aapki payment ki notification merchant ko bhej di gayi hai. Merchant ab confirms kar ke invoice ko <strong className="text-emerald-700">Paid</strong> mark kar sakein gey.
+              </p>
+              <div className="pt-2">
+                <button
+                  onClick={onClose}
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-medium text-sm transition-colors cursor-pointer"
+                >
+                  Done & Close
                 </button>
               </div>
             </div>
@@ -442,29 +494,56 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
               {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
             </div>
           ) : (
-            <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-100 space-y-2.5">
-              <p className="text-xs font-medium text-slate-700">
-                Send exact payment on Polygon and submit your Transaction Hash below if requested:
+            <div className="p-4 bg-purple-50/80 rounded-2xl border border-purple-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-900">Paid via QR / Mobile Wallet?</span>
+                <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">Step 2 of 2</span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Scan & transfer karne ke baad niche <strong>&ldquo;I Have Paid&rdquo;</strong> button click karein taake merchant ko aapki payment confirmation notification chali jaye:
               </p>
-              <form onSubmit={handleManualVerify} className="space-y-1.5 pt-1 border-t border-purple-100">
+
+              <button
+                type="button"
+                onClick={handleClaimPaid}
+                disabled={isClaimingPaid}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-600/20 active:scale-[0.99]"
+              >
+                {isClaimingPaid ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+                <span>I Have Paid (Notify Merchant)</span>
+              </button>
+
+              {/* Optional Tx Hash Field */}
+              <div className="pt-2 border-t border-purple-200/60 space-y-1.5">
+                <label className="text-[11px] font-medium text-slate-600">
+                  Optional: Transaction Hash (0x...)
+                </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={manualTxHash}
                     onChange={(e) => setManualTxHash(e.target.value)}
-                    placeholder="Polygon transaction hash (0x...)"
+                    placeholder="Polygon tx hash (optional)"
                     className="flex-1 px-3 py-1.5 bg-white border border-purple-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
                   />
                   <button
-                    type="submit"
-                    disabled={isVerifyingTx}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      handleManualVerify(e)
+                    }}
+                    disabled={isVerifyingTx || !manualTxHash.trim()}
                     className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 shadow-xs"
                   >
                     {isVerifyingTx ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Verify Hash"}
                   </button>
                 </div>
-                {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
-              </form>
+              </div>
+              {txError && <p className="text-[11px] text-red-600 font-medium">{txError}</p>}
             </div>
           )}
 
