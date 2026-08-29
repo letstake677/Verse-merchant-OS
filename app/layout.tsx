@@ -4,6 +4,11 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "Verse Merchant OS | Web3 Merchant Invoicing & Checkout",
   description: "Next-gen Web3 invoicing with automated real-time POL, VERSE, and USDC conversion on Polygon.",
+  icons: {
+    icon: "/verse-logo.png",
+    shortcut: "/verse-logo.png",
+    apple: "/verse-logo.png",
+  },
 }
 
 export default function RootLayout({

@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { PaymentReceipt } from "@/types/receipt"
 import { Button } from "@/components/ui/button"
+import { VerseLogo } from "@/components/ui/verse-logo"
 
 function formatAddress(addr: string): string {
   if (!addr || addr.length < 10) return addr || "N/A"
@@ -175,10 +176,8 @@ export default function PaymentReceiptPage() {
           <div className="p-6 sm:p-8 border-b border-slate-100 bg-slate-50/50 print:bg-white print:p-0 print:border-b-2 print:border-slate-900 print:pb-4">
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-base shadow-xs print:border print:border-slate-900">
-                    V
-                  </div>
+                <div className="flex items-center gap-3">
+                  <VerseLogo size="md" variant="icon" priority />
                   <div>
                     <h1 className="text-lg font-bold text-slate-900 tracking-tight">
                       {receipt.businessName}

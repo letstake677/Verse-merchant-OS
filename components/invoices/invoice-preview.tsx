@@ -4,6 +4,7 @@ import * as React from "react"
 import { Eye, FileText, Calendar, Mail, User, ShieldCheck } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { VerseLogo } from "@/components/ui/verse-logo"
 import { InvoiceFormState } from "@/types/invoice"
 import { calculateInvoiceTotals, calculateLineItemAmount, parseQuantity, parseToCents, formatCents } from "@/lib/financial"
 
@@ -172,7 +173,7 @@ export function InvoicePreview({ formData, invoiceNumber, className }: InvoicePr
             <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
             <span>Payable on Polygon Network</span>
           </div>
-          <span>Verse Merchant OS</span>
+          <VerseLogo size="xs" variant="icon" />
         </div>
       </CardContent>
     </Card>

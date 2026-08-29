@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { VerseLogo } from "@/components/ui/verse-logo"
 import { useMerchantSession } from "@/components/providers/merchant-auth-provider"
 import { formatWalletAddress } from "@/lib/utils/wallet"
 import { getChainMetadata } from "@/lib/web3/chains"
@@ -77,22 +78,9 @@ export function Sidebar({
       )}
     >
       {/* Brand Header */}
-      <div className="h-16 px-6 flex items-center justify-between border-b border-slate-100">
-        <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-xs">
-            <span className="font-bold text-sm tracking-wider font-mono">V</span>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-sm tracking-tight text-slate-900">
-                VERSE
-              </span>
-              <span className="text-[11px] font-medium px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                OS
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 font-medium">Merchant Portal</p>
-          </div>
+      <div className="h-16 px-5 flex items-center justify-between border-b border-slate-100">
+        <Link href="/dashboard" className="flex items-center">
+          <VerseLogo size="md" subtitle="Merchant Portal" priority />
         </Link>
       </div>
 

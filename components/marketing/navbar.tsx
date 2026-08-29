@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Menu, X, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { VerseLogo } from "@/components/ui/verse-logo"
 
 interface MarketingNavbarProps {
   onNavigateToDashboard?: () => void
@@ -24,18 +25,8 @@ export function MarketingNavbar({ onNavigateToDashboard }: MarketingNavbarProps)
       <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Left: Brand Identity */}
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2.5 select-none group">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-xs group-hover:bg-slate-800 transition-colors">
-              <span className="font-bold text-sm tracking-wider font-mono">V</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-sm sm:text-base tracking-tight text-slate-900">
-                VERSE
-              </span>
-              <span className="text-xs font-semibold text-slate-500">
-                Merchant OS
-              </span>
-            </div>
+          <Link href="/" className="flex items-center select-none group">
+            <VerseLogo size="md" subtitle="Merchant OS" priority />
           </Link>
 
           <Badge variant="outline" className="hidden lg:inline-flex text-[10px] py-0 px-2 text-slate-500 font-mono">

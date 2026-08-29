@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { formatWalletAddress } from "@/lib/utils/wallet"
 import { getChainMetadata, isSupportedChain } from "@/lib/web3/chains"
+import { VerseLogo } from "@/components/ui/verse-logo"
 
 type AuthStep = "idle" | "connecting" | "nonce" | "signing" | "verifying"
 
@@ -214,9 +215,8 @@ function LoginPageContent() {
     <main className="min-h-screen bg-[#fbfcfd] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 text-slate-800 antialiased font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
         {/* Branding badge */}
-        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 text-indigo-700 px-3.5 py-1.5 rounded-full mb-6 select-none shadow-xs">
-          <ShieldCheck className="h-4 w-4 shrink-0 text-indigo-600 animate-pulse" />
-          <span className="text-xs font-bold uppercase tracking-wider">Verse Merchant OS</span>
+        <div className="mb-6 flex flex-col items-center">
+          <VerseLogo size="xl" variant="badge" subtitle="Merchant OS" priority />
         </div>
         
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 text-center">

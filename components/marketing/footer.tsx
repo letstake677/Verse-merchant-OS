@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Sparkles, ArrowUpRight } from "lucide-react"
+import { VerseLogo } from "@/components/ui/verse-logo"
 
 export function MarketingFooter() {
   const footerGroups = [
@@ -50,18 +51,8 @@ export function MarketingFooter() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-8 lg:gap-12">
           {/* Left Column: Brand & Tagline (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
-            <Link href="/" className="flex items-center gap-2.5 select-none">
-              <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-xs">
-                <span className="font-bold text-sm font-mono">V</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-base tracking-tight text-slate-900">
-                  VERSE
-                </span>
-                <span className="text-xs font-semibold text-slate-500">
-                  Merchant OS
-                </span>
-              </div>
+            <Link href="/" className="flex items-center select-none">
+              <VerseLogo size="md" subtitle="Merchant OS" />
             </Link>
 
             <p className="text-xs sm:text-sm text-slate-500 font-normal leading-relaxed max-w-sm">
