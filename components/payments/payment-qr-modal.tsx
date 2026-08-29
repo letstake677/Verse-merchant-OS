@@ -21,6 +21,7 @@ import {
   Printer,
   Smartphone,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react"
 
 interface PaymentQrModalProps {
@@ -176,6 +177,21 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
     navigator.clipboard.writeText(recipient)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleOpenMetaMaskBrowser = () => {
+    if (typeof window !== "undefined") {
+      const rawUrl = window.location.href
+      const cleanUrl = rawUrl.replace(/^https?:\/\//, "")
+      window.location.href = `https://metamask.app.link/dapp/${cleanUrl}`
+    }
+  }
+
+  const handleOpenTrustWallet = () => {
+    if (typeof window !== "undefined") {
+      const fullUrl = encodeURIComponent(window.location.href)
+      window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${fullUrl}`
+    }
   }
 
   const handleOpenWalletDeepLink = () => {
@@ -341,15 +357,47 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
             )}
           </div>
 
-          {/* Deep Link Button for Mobile Users */}
-          <button
-            type="button"
-            onClick={handleOpenWalletDeepLink}
-            className="w-full py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-          >
-            <Smartphone className="w-4 h-4" />
-            <span>Open in Installed Crypto Wallet App</span>
-          </button>
+          {/* Mobile Direct Wallet Launchers */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleOpenMetaMaskBrowser}
+                className="py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>Open in MetaMask Browser</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenTrustWallet}
+                className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Smartphone className="w-4 h-4 text-purple-400" />
+                <span>Open in Trust Wallet</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenWalletDeepLink}
+              className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
+            >
+              <span>Or Direct Wallet Intent (EIP-681)</span>
+            </button>
+
+            {/* Troubleshooting info for MetaMask Confirm Request infinite loading */}
+            <div className="p-2.5 bg-amber-50/80 border border-amber-200/80 rounded-xl text-[11px] text-amber-900 space-y-1">
+              <div className="font-bold flex items-center gap-1 text-amber-950">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Wallet stuck on &ldquo;Confirm Request&rdquo; loading?</span>
+              </div>
+              <p className="text-amber-800 text-[10.5px] leading-relaxed">
+                Apne wallet app (MetaMask) me pehle <strong>Polygon Mainnet</strong> network select karein, ya upar <strong>&ldquo;Open in MetaMask Browser&rdquo;</strong> button use karein jahan 1-click auto network switch aur payment ho jati hai.
+              </p>
+            </div>
+          </div>
 
           {/* Merchant Address Section */}
           <div className="space-y-1.5">

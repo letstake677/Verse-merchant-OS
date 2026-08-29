@@ -40,6 +40,7 @@ import {
   Sparkles,
   HelpCircle,
   Plus,
+  Smartphone,
 } from "lucide-react"
 
 function safeParseBaseUnits(amountStr: string, decimals: number): string {
@@ -184,6 +185,20 @@ export default function PublicPayPage() {
   const handlePrint = () => {
     if (typeof window !== "undefined") {
       window.print()
+    }
+  }
+
+  const handleOpenMetaMask = () => {
+    if (typeof window !== "undefined") {
+      const cleanUrl = window.location.href.replace(/^https?:\/\//, "")
+      window.location.href = `https://metamask.app.link/dapp/${cleanUrl}`
+    }
+  }
+
+  const handleOpenTrustWallet = () => {
+    if (typeof window !== "undefined") {
+      const fullUrl = encodeURIComponent(window.location.href)
+      window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${fullUrl}`
     }
   }
 
@@ -630,6 +645,32 @@ export default function PublicPayPage() {
                       <span>Open Fullscreen QR</span>
                     </button>
                   </div>
+
+                  {/* Mobile Direct In-App Browser Options */}
+                  <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-semibold text-slate-700">Mobile Wallet 1-Tap Checkout:</span>
+                      <span>Polygon PoS</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleOpenMetaMask}
+                        className="py-2.5 px-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Open in MetaMask Browser</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenTrustWallet}
+                        className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Open in Trust Wallet</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -713,6 +754,28 @@ export default function PublicPayPage() {
                       <div className="flex items-center gap-2 text-xs text-slate-500">
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
                         <span>Awaiting transaction broadcast on Polygon...</span>
+                      </div>
+
+                      {/* Mobile Wallet Direct Buttons */}
+                      <div className="pt-2 border-t border-slate-200 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={handleOpenMetaMask}
+                            className="py-2 px-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Smartphone className="w-3.5 h-3.5" />
+                            <span>Open in MetaMask</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenTrustWallet}
+                            className="py-2 px-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Smartphone className="w-3.5 h-3.5 text-purple-400" />
+                            <span>Open in Trust Wallet</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
