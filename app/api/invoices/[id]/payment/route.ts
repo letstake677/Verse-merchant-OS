@@ -37,13 +37,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const body = await req.json().catch(() => ({}))
-    const { txHash, token, chainId, payerAddress, recipientAddress } = body
+    const rawTxHash = body.txHash || body.transactionHash
+    const { token, chainId, payerAddress, recipientAddress } = body
 
-    if (!txHash || typeof txHash !== "string" || !/^0x([A-Fa-f0-9]{64})$/.test(txHash.trim())) {
+    if (!rawTxHash || typeof rawTxHash !== "string" || !/^0x([A-Fa-f0-9]{64})$/.test(rawTxHash.trim())) {
       return NextResponse.json({ ok: false, error: "A valid on-chain transaction hash (0x...) is required" }, { status: 400 })
     }
 
-    const cleanTxHash = txHash.trim()
+    const cleanTxHash = rawTxHash.trim()
 
     // Check if this transaction hash has already been used
     const existingTx = await PaymentRepository.findByTransactionHashGlobal(cleanTxHash)

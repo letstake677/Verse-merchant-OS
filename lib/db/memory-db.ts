@@ -57,10 +57,14 @@ if (!global._verseInMemoryStorage) {
 }
 
 function getStore(collectionName: string): Map<string, any> {
-  if (!global._verseInMemoryStorage!.has(collectionName)) {
-    global._verseInMemoryStorage!.set(collectionName, new Map<string, any>())
+  if (!global._verseInMemoryStorage) {
+    global._verseInMemoryStorage = new Map<string, Map<string, any>>()
   }
-  return global._verseInMemoryStorage!.get(collectionName)!
+  loadFromDisk()
+  if (!global._verseInMemoryStorage.has(collectionName)) {
+    global._verseInMemoryStorage.set(collectionName, new Map<string, any>())
+  }
+  return global._verseInMemoryStorage.get(collectionName)!
 }
 
 function getNestedValue(obj: any, path: string): any {

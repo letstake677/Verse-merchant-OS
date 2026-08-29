@@ -339,7 +339,66 @@ export class InvoiceRepository {
         .limit(limit)
 
       const documents = await cursor.toArray()
-      const invoices = documents.map(serializeInvoiceDocument)
+      const rawInvoices = documents.map(serializeInvoiceDocument)
+
+      // Query confirmed payments to guarantee cross-device reconciliation
+      const db = await getDb()
+      const payments = await db.collection("payments").find({
+        status: { $in: ["confirmed", "paid"] },
+      }).toArray()
+
+      const paidSet = new Set<string>()
+      payments.forEach((p: any) => {
+        if (p.invoiceId) {
+          paidSet.add(p.invoiceId.toLowerCase())
+          paidSet.add(p.invoiceId.replace(/^inv-?/i, "").toLowerCase())
+          paidSet.add(`inv-${p.invoiceId.replace(/^inv-?/i, "")}`.toLowerCase())
+        }
+        if (p.reference) {
+          paidSet.add(p.reference.toLowerCase())
+          paidSet.add(p.reference.replace(/^inv-?/i, "").toLowerCase())
+          paidSet.add(`inv-${p.reference.replace(/^inv-?/i, "")}`.toLowerCase())
+        }
+      })
+
+      // Query any other paid invoice docs
+      const paidDocs = await collection.find({ status: "paid" }).toArray()
+      paidDocs.forEach((d: any) => {
+        if (d.id) {
+          paidSet.add(d.id.toLowerCase())
+          paidSet.add(d.id.replace(/^inv-?/i, "").toLowerCase())
+          paidSet.add(`inv-${d.id.replace(/^inv-?/i, "")}`.toLowerCase())
+        }
+        if (d.invoiceNumber) {
+          paidSet.add(d.invoiceNumber.toLowerCase())
+          paidSet.add(d.invoiceNumber.replace(/^inv-?/i, "").toLowerCase())
+          paidSet.add(`inv-${d.invoiceNumber.replace(/^inv-?/i, "")}`.toLowerCase())
+        }
+      })
+
+      const invoices = rawInvoices.map((inv) => {
+        const idLower = (inv.id || "").toLowerCase()
+        const numLower = (inv.invoiceNumber || "").toLowerCase()
+        const idNoPref = (inv.id || "").replace(/^inv-?/i, "").toLowerCase()
+        const numNoPref = (inv.invoiceNumber || "").replace(/^inv-?/i, "").toLowerCase()
+
+        const isPaid =
+          inv.status === "paid" ||
+          paidSet.has(idLower) ||
+          paidSet.has(numLower) ||
+          paidSet.has(idNoPref) ||
+          paidSet.has(numNoPref) ||
+          paidSet.has(`inv-${idNoPref}`) ||
+          paidSet.has(`inv-${numNoPref}`)
+
+        if (isPaid && inv.status !== "paid") {
+          return {
+            ...inv,
+            status: "paid" as InvoiceStatus,
+          }
+        }
+        return inv
+      })
 
       return {
         invoices,
@@ -391,15 +450,52 @@ export class InvoiceRepository {
         .find({
           $or: merchantOrClauses,
         })
-        .project<{ status: InvoiceStatus; total: string }>({ status: 1, total: 1 })
+        .project<{ id?: string; invoiceNumber?: string; status: InvoiceStatus; total: string }>({ id: 1, invoiceNumber: 1, status: 1, total: 1 })
         .toArray()
+
+      // Cross-check payments
+      const db = await getDb()
+      const payments = await db.collection("payments").find({
+        status: { $in: ["confirmed", "paid"] },
+      }).toArray()
+
+      const paidSet = new Set<string>()
+      payments.forEach((p: any) => {
+        if (p.invoiceId) {
+          paidSet.add(p.invoiceId.toLowerCase())
+          paidSet.add(p.invoiceId.replace(/^inv-?/i, "").toLowerCase())
+          paidSet.add(`inv-${p.invoiceId.replace(/^inv-?/i, "")}`.toLowerCase())
+        }
+        if (p.reference) {
+          paidSet.add(p.reference.toLowerCase())
+          paidSet.add(p.reference.replace(/^inv-?/i, "").toLowerCase())
+          paidSet.add(`inv-${p.reference.replace(/^inv-?/i, "")}`.toLowerCase())
+        }
+      })
 
       let draftCount = 0
       let outstandingCents = 0
       let paidCents = 0
 
       for (const doc of docs) {
-        const normalizedStatus = (doc.status || "draft").toLowerCase()
+        const idLower = (doc.id || "").toLowerCase()
+        const numLower = (doc.invoiceNumber || "").toLowerCase()
+        const idNoPref = (doc.id || "").replace(/^inv-?/i, "").toLowerCase()
+        const numNoPref = (doc.invoiceNumber || "").replace(/^inv-?/i, "").toLowerCase()
+
+        let normalizedStatus = (doc.status || "draft").toLowerCase()
+        if (
+          normalizedStatus !== "paid" &&
+          (paidSet.has(idLower) ||
+            paidSet.has(numLower) ||
+            paidSet.has(idNoPref) ||
+            paidSet.has(numNoPref) ||
+            paidSet.has(`inv-${idNoPref}`) ||
+            paidSet.has(`inv-${numNoPref}`))
+        ) {
+          normalizedStatus = "paid"
+        }
+
         if (normalizedStatus === "draft") {
           draftCount++
           outstandingCents += parseToCents(doc.total)

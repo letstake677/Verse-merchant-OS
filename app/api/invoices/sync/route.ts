@@ -33,15 +33,35 @@ export async function POST(req: NextRequest) {
     }
 
     const paymentAddress = body.paymentAddress ? toChecksumAddress(body.paymentAddress) : ""
+    
+    // Check if there is already a confirmed payment for this invoice
+    let payment = null
+    try {
+      const { getDb } = await import("@/lib/db/mongodb")
+      const db = await getDb()
+      payment = await db.collection("payments").findOne({
+        $or: [
+          { invoiceId: targetId },
+          { invoiceId: body.invoiceNumber },
+          { invoiceId: body.id },
+          { reference: `INV-${body.invoiceNumber || targetId}` },
+          { reference: body.invoiceNumber || targetId },
+        ],
+        status: { $in: ["confirmed", "paid"] },
+      })
+    } catch {}
+
+    const isAlreadyPaid = body.status === "paid" || Boolean(payment)
+
     const created = await InvoiceRepository.createInvoice({
       ...body,
       id: body.id,
       invoiceNumber: body.invoiceNumber || body.id,
       paymentAddress,
       merchantId: body.merchantId || "shared_merchant",
-      status: body.status || "pending",
-      paymentId: body.paymentId,
-      paidAt: body.status === "paid" ? (body.paidAt || new Date()) : undefined,
+      status: isAlreadyPaid ? "paid" : (body.status || "pending"),
+      paymentId: body.paymentId || (payment as any)?.transactionHash || (payment as any)?.id,
+      paidAt: isAlreadyPaid ? (body.paidAt || (payment as any)?.createdAt || new Date()) : undefined,
     })
 
     return NextResponse.json({ ok: true, invoice: created })
