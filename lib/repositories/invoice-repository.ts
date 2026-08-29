@@ -339,66 +339,7 @@ export class InvoiceRepository {
         .limit(limit)
 
       const documents = await cursor.toArray()
-      const rawInvoices = documents.map(serializeInvoiceDocument)
-
-      // Query confirmed payments to guarantee cross-device reconciliation
-      const db = await getDb()
-      const payments = await db.collection("payments").find({
-        status: { $in: ["confirmed", "paid"] },
-      }).toArray()
-
-      const paidSet = new Set<string>()
-      payments.forEach((p: any) => {
-        if (p.invoiceId) {
-          paidSet.add(p.invoiceId.toLowerCase())
-          paidSet.add(p.invoiceId.replace(/^inv-?/i, "").toLowerCase())
-          paidSet.add(`inv-${p.invoiceId.replace(/^inv-?/i, "")}`.toLowerCase())
-        }
-        if (p.reference) {
-          paidSet.add(p.reference.toLowerCase())
-          paidSet.add(p.reference.replace(/^inv-?/i, "").toLowerCase())
-          paidSet.add(`inv-${p.reference.replace(/^inv-?/i, "")}`.toLowerCase())
-        }
-      })
-
-      // Query any other paid invoice docs
-      const paidDocs = await collection.find({ status: "paid" }).toArray()
-      paidDocs.forEach((d: any) => {
-        if (d.id) {
-          paidSet.add(d.id.toLowerCase())
-          paidSet.add(d.id.replace(/^inv-?/i, "").toLowerCase())
-          paidSet.add(`inv-${d.id.replace(/^inv-?/i, "")}`.toLowerCase())
-        }
-        if (d.invoiceNumber) {
-          paidSet.add(d.invoiceNumber.toLowerCase())
-          paidSet.add(d.invoiceNumber.replace(/^inv-?/i, "").toLowerCase())
-          paidSet.add(`inv-${d.invoiceNumber.replace(/^inv-?/i, "")}`.toLowerCase())
-        }
-      })
-
-      const invoices = rawInvoices.map((inv) => {
-        const idLower = (inv.id || "").toLowerCase()
-        const numLower = (inv.invoiceNumber || "").toLowerCase()
-        const idNoPref = (inv.id || "").replace(/^inv-?/i, "").toLowerCase()
-        const numNoPref = (inv.invoiceNumber || "").replace(/^inv-?/i, "").toLowerCase()
-
-        const isPaid =
-          inv.status === "paid" ||
-          paidSet.has(idLower) ||
-          paidSet.has(numLower) ||
-          paidSet.has(idNoPref) ||
-          paidSet.has(numNoPref) ||
-          paidSet.has(`inv-${idNoPref}`) ||
-          paidSet.has(`inv-${numNoPref}`)
-
-        if (isPaid && inv.status !== "paid") {
-          return {
-            ...inv,
-            status: "paid" as InvoiceStatus,
-          }
-        }
-        return inv
-      })
+      const invoices = documents.map(serializeInvoiceDocument)
 
       return {
         invoices,
@@ -453,48 +394,12 @@ export class InvoiceRepository {
         .project<{ id?: string; invoiceNumber?: string; status: InvoiceStatus; total: string }>({ id: 1, invoiceNumber: 1, status: 1, total: 1 })
         .toArray()
 
-      // Cross-check payments
-      const db = await getDb()
-      const payments = await db.collection("payments").find({
-        status: { $in: ["confirmed", "paid"] },
-      }).toArray()
-
-      const paidSet = new Set<string>()
-      payments.forEach((p: any) => {
-        if (p.invoiceId) {
-          paidSet.add(p.invoiceId.toLowerCase())
-          paidSet.add(p.invoiceId.replace(/^inv-?/i, "").toLowerCase())
-          paidSet.add(`inv-${p.invoiceId.replace(/^inv-?/i, "")}`.toLowerCase())
-        }
-        if (p.reference) {
-          paidSet.add(p.reference.toLowerCase())
-          paidSet.add(p.reference.replace(/^inv-?/i, "").toLowerCase())
-          paidSet.add(`inv-${p.reference.replace(/^inv-?/i, "")}`.toLowerCase())
-        }
-      })
-
       let draftCount = 0
       let outstandingCents = 0
       let paidCents = 0
 
       for (const doc of docs) {
-        const idLower = (doc.id || "").toLowerCase()
-        const numLower = (doc.invoiceNumber || "").toLowerCase()
-        const idNoPref = (doc.id || "").replace(/^inv-?/i, "").toLowerCase()
-        const numNoPref = (doc.invoiceNumber || "").replace(/^inv-?/i, "").toLowerCase()
-
-        let normalizedStatus = (doc.status || "draft").toLowerCase()
-        if (
-          normalizedStatus !== "paid" &&
-          (paidSet.has(idLower) ||
-            paidSet.has(numLower) ||
-            paidSet.has(idNoPref) ||
-            paidSet.has(numNoPref) ||
-            paidSet.has(`inv-${idNoPref}`) ||
-            paidSet.has(`inv-${numNoPref}`))
-        ) {
-          normalizedStatus = "paid"
-        }
+        const normalizedStatus = (doc.status || "draft").toLowerCase()
 
         if (normalizedStatus === "draft") {
           draftCount++
@@ -864,67 +769,29 @@ export class InvoiceRepository {
       const collection = await this.getCollection()
       const now = new Date()
       const cleanId = decodeURIComponent(invoiceId).trim()
-      const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
-      const invPrefixed = `INV-${cleanNoPrefix}`
 
-      const orClauses: any[] = [
-        { id: cleanId },
-        { id: cleanNoPrefix },
-        { id: invPrefixed },
-        { invoiceNumber: cleanId },
-        { invoiceNumber: cleanNoPrefix },
-        { invoiceNumber: invPrefixed },
-        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
-        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
-        { id: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
-        { _id: cleanId as any },
-      ]
+      const queryClauses: any[] = [{ id: cleanId }]
       if (ObjectId.isValid(cleanId)) {
-        orClauses.push({ _id: new ObjectId(cleanId) })
+        queryClauses.push({ _id: new ObjectId(cleanId) })
+      }
+      if (merchantId) {
+        queryClauses.push({ invoiceNumber: cleanId, merchantId })
+      } else {
+        queryClauses.push({ invoiceNumber: cleanId })
       }
 
-      // Collect all matching documents to ensure every linked variant is updated
-      const existingDocs = await collection.find({ $or: orClauses }).toArray()
-      const idsToUpdate: any[] = []
-      const numbersToUpdate: string[] = []
+      const updateFilter = { $or: queryClauses }
 
-      existingDocs.forEach((d) => {
-        if (d._id) idsToUpdate.push(d._id)
-        if (d.invoiceNumber) {
-          numbersToUpdate.push(d.invoiceNumber)
-          const noPref = d.invoiceNumber.replace(/^inv-?/i, "")
-          numbersToUpdate.push(noPref)
-          numbersToUpdate.push(`INV-${noPref}`)
-        }
-        if (d.id) {
-          numbersToUpdate.push(d.id)
-          const noPref = d.id.replace(/^inv-?/i, "")
-          numbersToUpdate.push(noPref)
-          numbersToUpdate.push(`INV-${noPref}`)
-        }
+      await collection.updateMany(updateFilter, {
+        $set: {
+          status: "paid" as InvoiceStatus,
+          paymentId: paymentId || undefined,
+          paidAt: paidAtDate,
+          updatedAt: now,
+        },
       })
 
-      const finalOr: any[] = [...orClauses]
-      if (idsToUpdate.length > 0) finalOr.push({ _id: { $in: idsToUpdate } })
-      if (numbersToUpdate.length > 0) {
-        finalOr.push({ invoiceNumber: { $in: numbersToUpdate } })
-        finalOr.push({ id: { $in: numbersToUpdate } })
-      }
-
-      // Atomically update ALL matching documents in MongoDB across merchant IDs to status "paid"
-      await collection.updateMany(
-        { $or: finalOr },
-        {
-          $set: {
-            status: "paid" as InvoiceStatus,
-            paymentId: paymentId || undefined,
-            paidAt: paidAtDate,
-            updatedAt: now,
-          },
-        }
-      )
-
-      const updatedDoc = await collection.findOne({ $or: finalOr })
+      const updatedDoc = await collection.findOne(updateFilter)
       if (!updatedDoc) return null
       return serializeInvoiceDocument({ ...updatedDoc, status: "paid" })
     } catch (error) {

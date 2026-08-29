@@ -74,22 +74,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     invoice = await enrichInvoicePaymentAddress(invoice)
 
-    // Query payment records in MongoDB associated with this invoice
+    // Query payment records in MongoDB associated specifically with this invoice
     try {
       const db = await getDb()
-      const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
-      const invPrefixed = `INV-${cleanNoPrefix}`
 
       const paymentOrClauses: any[] = [
         { invoiceId: invoice.id },
-        { invoiceId: invoice.invoiceNumber },
-        { invoiceId: cleanId },
-        { invoiceId: cleanNoPrefix },
-        { invoiceId: invPrefixed },
-        { reference: `INV-${invoice.invoiceNumber}` },
-        { reference: invoice.invoiceNumber },
-        { reference: `INV-${cleanNoPrefix}` },
       ]
+
+      if (invoice.merchantId && invoice.invoiceNumber) {
+        paymentOrClauses.push({
+          invoiceNumber: invoice.invoiceNumber,
+          merchantId: invoice.merchantId,
+        })
+        paymentOrClauses.push({
+          reference: invoice.invoiceNumber,
+          merchantId: invoice.merchantId,
+        })
+      }
 
       const payments = await db
         .collection("payments")
@@ -110,14 +112,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         ;(invoice as any).payments = mappedPayments
 
         const hasConfirmedPayment = payments.some(
-          (p) => p.status === "confirmed" || p.status === "paid" || !!p.transactionHash
+          (p) => (p.status === "confirmed" || p.status === "paid") && !!p.transactionHash
         )
         if (hasConfirmedPayment && invoice.status !== "paid") {
           invoice.status = "paid"
           invoice.paidAt = payments[0].createdAt instanceof Date ? payments[0].createdAt.toISOString() : new Date().toISOString()
           invoice.paymentId = payments[0].transactionHash || payments[0]._id.toString()
           await InvoiceRepository.markInvoicePaid(
-            invoice.id || cleanId,
+            invoice.id,
             invoice.merchantId,
             invoice.paymentId,
             payments[0].createdAt instanceof Date ? payments[0].createdAt : new Date()

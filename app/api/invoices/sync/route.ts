@@ -34,19 +34,13 @@ export async function POST(req: NextRequest) {
 
     const paymentAddress = body.paymentAddress ? toChecksumAddress(body.paymentAddress) : ""
     
-    // Check if there is already a confirmed payment for this invoice
+    // Check if there is already a confirmed payment for this specific invoice ID
     let payment = null
     try {
       const { getDb } = await import("@/lib/db/mongodb")
       const db = await getDb()
       payment = await db.collection("payments").findOne({
-        $or: [
-          { invoiceId: targetId },
-          { invoiceId: body.invoiceNumber },
-          { invoiceId: body.id },
-          { reference: `INV-${body.invoiceNumber || targetId}` },
-          { reference: body.invoiceNumber || targetId },
-        ],
+        invoiceId: targetId,
         status: { $in: ["confirmed", "paid"] },
       })
     } catch {}
