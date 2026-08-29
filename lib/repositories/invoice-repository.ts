@@ -512,8 +512,13 @@ export class InvoiceRepository {
         paidAtObj = now
       }
 
+      const docId =
+        (input as any).id && ObjectId.isValid((input as any).id)
+          ? new ObjectId((input as any).id)
+          : new ObjectId()
+
       const newDoc: InvoiceDocument = {
-        _id: new ObjectId(),
+        _id: docId,
         merchantId: input.merchantId,
         customerId: input.customerId,
         customerName: input.customerName,

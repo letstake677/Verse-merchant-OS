@@ -74,6 +74,60 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     invoice = await enrichInvoicePaymentAddress(invoice)
 
+    // Query payment records in MongoDB associated with this invoice
+    try {
+      const db = await getDb()
+      const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
+      const invPrefixed = `INV-${cleanNoPrefix}`
+
+      const paymentOrClauses: any[] = [
+        { invoiceId: invoice.id },
+        { invoiceId: invoice.invoiceNumber },
+        { invoiceId: cleanId },
+        { invoiceId: cleanNoPrefix },
+        { invoiceId: invPrefixed },
+        { reference: `INV-${invoice.invoiceNumber}` },
+        { reference: invoice.invoiceNumber },
+        { reference: `INV-${cleanNoPrefix}` },
+      ]
+
+      const payments = await db
+        .collection("payments")
+        .find({ $or: paymentOrClauses })
+        .sort({ createdAt: -1 })
+        .toArray()
+
+      if (payments && payments.length > 0) {
+        const mappedPayments = payments.map((p) => ({
+          id: p._id.toString(),
+          amount: p.amount,
+          currency: p.currency,
+          token: p.token,
+          txHash: p.transactionHash,
+          status: p.status,
+          createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+        }))
+        ;(invoice as any).payments = mappedPayments
+
+        const hasConfirmedPayment = payments.some(
+          (p) => p.status === "confirmed" || p.status === "paid"
+        )
+        if (hasConfirmedPayment && invoice.status !== "paid") {
+          invoice.status = "paid"
+          invoice.paidAt = payments[0].createdAt instanceof Date ? payments[0].createdAt.toISOString() : new Date().toISOString()
+          invoice.paymentId = payments[0].transactionHash || payments[0]._id.toString()
+          await InvoiceRepository.markInvoicePaid(
+            invoice.id || cleanId,
+            invoice.merchantId,
+            invoice.paymentId,
+            payments[0].createdAt instanceof Date ? payments[0].createdAt : new Date()
+          )
+        }
+      }
+    } catch (paymentQueryErr) {
+      console.warn("Could not attach payments to invoice:", paymentQueryErr)
+    }
+
     return NextResponse.json({ ok: true, invoice })
   } catch (err) {
     console.error("GET /api/invoices/[id] error:", err)
