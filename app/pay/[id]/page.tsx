@@ -94,66 +94,31 @@ export default function PublicPayPage() {
 
   const { calculateAmount, refreshPrices, secondsRemaining, isLoading: pricesLoading } = useCryptoPrices()
 
-  const fetchInvoice = React.useCallback(async () => {
+  const fetchInvoice = React.useCallback(async (silent = false) => {
     if (!id) return
-    setIsLoading(true)
-    setError(null)
-
-    const cleanId = decodeURIComponent(id).trim()
-    const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
-
-    // Check localStorage cache for paid status
-    let cachedPaid: any = null
-    if (typeof window !== "undefined") {
-      try {
-        const keys = [
-          `verse_invoice_${cleanId}`,
-          `verse_invoice_${cleanNoPrefix}`,
-          `verse_invoice_INV-${cleanNoPrefix}`,
-        ]
-        for (const k of keys) {
-          const raw = localStorage.getItem(k)
-          if (raw) {
-            const p = JSON.parse(raw)
-            if (p && p.status === "paid") {
-              cachedPaid = p
-              break
-            }
-          }
-        }
-      } catch {}
+    if (!silent) {
+      setIsLoading(true)
+      setError(null)
     }
 
-    // 1. First, fetch real-time invoice status directly from backend API
+    const cleanId = decodeURIComponent(id).trim()
+
+    // 1. Fetch real-time invoice status directly from MongoDB backend API
     try {
-      const res = await fetch(`/api/invoices/${encodeURIComponent(cleanId)}`)
+      const res = await fetch(`/api/invoices/${encodeURIComponent(cleanId)}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      })
       if (res.ok) {
         const data = await res.json()
         if (data.invoice) {
-          let finalInv = data.invoice
-          if (cachedPaid && cachedPaid.status === "paid" && finalInv.status !== "paid") {
-            try {
-              const syncRes = await fetch("/api/invoices/sync", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(cachedPaid),
-              })
-              if (syncRes.ok) {
-                const sData = await syncRes.json()
-                if (sData.invoice) finalInv = sData.invoice
-              }
-            } catch {}
-          }
-          setInvoice(finalInv)
-          if (typeof window !== "undefined") {
-            localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(finalInv))
-          }
+          setInvoice(data.invoice)
           setIsLoading(false)
           return
         }
       }
     } catch {
-      // Backend fetch failed, continue to snapshot sync
+      // Backend fetch failed, continue to fallback sync
     }
 
     // 2. Check if URL contains embedded compressed snapshot data (?d=...)
@@ -166,63 +131,48 @@ export default function PublicPayPage() {
     if (dataParam) {
       const decoded = decodeInvoiceFromUrlParam(dataParam)
       if (decoded) {
-        const toSync = cachedPaid && cachedPaid.status === "paid" ? cachedPaid : decoded
         try {
           const syncRes = await fetch("/api/invoices/sync", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(toSync),
+            body: JSON.stringify(decoded),
           })
           if (syncRes.ok) {
             const syncData = await syncRes.json()
             if (syncData.invoice) {
               setInvoice(syncData.invoice)
-              if (typeof window !== "undefined") {
-                localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(syncData.invoice))
-              }
               setIsLoading(false)
               return
             }
           }
         } catch {}
 
-        setInvoice(toSync)
-        if (typeof window !== "undefined") {
-          localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(toSync))
-        }
+        setInvoice(decoded)
         setIsLoading(false)
         return
       }
     }
 
-    if (cachedPaid) {
-      setInvoice(cachedPaid)
-      setIsLoading(false)
-      return
-    }
-
-    // 3. Fallback to local storage cache
-    if (typeof window !== "undefined") {
-      try {
-        const cached = localStorage.getItem(`verse_invoice_${cleanId}`)
-        if (cached) {
-          const parsed = JSON.parse(cached)
-          setInvoice(parsed)
-          setIsLoading(false)
-          return
-        }
-      } catch {}
-    }
-
-    // If invoice not found, report clean error
+    // If invoice not found in DB or URL, report clean error
     setError("Invoice record not found on the network or has expired.")
     setIsLoading(false)
   }, [id, searchParams])
 
-  // Fetch invoice status on mount
+  // Fetch invoice status on mount and poll while pending
   React.useEffect(() => {
     fetchInvoice()
   }, [fetchInvoice])
+
+  // Background real-time polling to detect on-chain settlement across devices
+  React.useEffect(() => {
+    if (!invoice || invoice.status === "paid") return
+
+    const interval = setInterval(() => {
+      fetchInvoice(true)
+    }, 3500)
+
+    return () => clearInterval(interval)
+  }, [invoice?.status, fetchInvoice])
 
   const copyToClipboard = (text: string, fieldId: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -1021,27 +971,11 @@ export default function PublicPayPage() {
           isOpen={isPayOpen}
           onClose={() => setIsPayOpen(false)}
           onSuccess={() => {
-            const cleanId = decodeURIComponent(id).trim()
-            const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
-            setInvoice(paidObj)
-            if (typeof window !== "undefined") {
-              localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(paidObj))
-              if (invoice.invoiceNumber) {
-                localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
-              }
-            }
+            fetchInvoice(true)
             setIsPayOpen(false)
           }}
           onPaid={() => {
-            const cleanId = decodeURIComponent(id).trim()
-            const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
-            setInvoice(paidObj)
-            if (typeof window !== "undefined") {
-              localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(paidObj))
-              if (invoice.invoiceNumber) {
-                localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
-              }
-            }
+            fetchInvoice(true)
             setIsPayOpen(false)
           }}
         />
@@ -1053,15 +987,7 @@ export default function PublicPayPage() {
           isOpen={isQrModalOpen}
           onClose={() => setIsQrModalOpen(false)}
           onPaid={() => {
-            const cleanId = decodeURIComponent(id).trim()
-            const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
-            setInvoice(paidObj)
-            if (typeof window !== "undefined") {
-              localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(paidObj))
-              if (invoice.invoiceNumber) {
-                localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
-              }
-            }
+            fetchInvoice(true)
             setIsQrModalOpen(false)
           }}
         />

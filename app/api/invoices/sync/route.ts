@@ -11,10 +11,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Invalid invoice data" }, { status: 400 })
     }
 
-    const existing = await InvoiceRepository.findById(body.id || body.invoiceNumber)
+    const targetId = body.id || body.invoiceNumber
+    const existing = await InvoiceRepository.findById(targetId)
     if (existing) {
-      if (body.status === "paid" && existing.status !== "paid") {
-        const updated = await InvoiceRepository.markInvoicePaid(existing.id, existing.merchantId, body.paymentId)
+      if (body.status === "paid") {
+        const updated = await InvoiceRepository.markInvoicePaid(
+          existing.id || targetId,
+          existing.merchantId,
+          body.paymentId
+        )
         return NextResponse.json({ ok: true, invoice: updated || { ...existing, status: "paid" } })
       }
       return NextResponse.json({ ok: true, invoice: existing })
@@ -27,6 +32,9 @@ export async function POST(req: NextRequest) {
       invoiceNumber: body.invoiceNumber || body.id,
       paymentAddress,
       merchantId: body.merchantId || "shared_merchant",
+      status: body.status || "pending",
+      paymentId: body.paymentId,
+      paidAt: body.status === "paid" ? (body.paidAt || new Date()) : undefined,
     })
 
     return NextResponse.json({ ok: true, invoice: created })

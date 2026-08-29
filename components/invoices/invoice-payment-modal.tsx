@@ -252,7 +252,7 @@ export function InvoicePaymentModal({
         throw new Error(verifyErrorMsg)
       }
 
-      // Guarantee backend database invoice record is saved as paid
+      // Guarantee backend database invoice record is saved as paid in MongoDB
       try {
         await fetch("/api/invoices/sync", {
           method: "POST",
@@ -264,24 +264,11 @@ export function InvoicePaymentModal({
             paymentId: hash,
           }),
         })
-      } catch {}
+      } catch (syncErr) {
+        console.warn("MongoDB sync notice:", syncErr)
+      }
 
       setPaymentSuccess(true)
-      try {
-        if (typeof window !== "undefined") {
-          const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString(), paymentId: hash }
-          const cleanNoPrefix = invoice.id.replace(/^inv-?/i, "")
-          localStorage.setItem(`verse_invoice_${invoice.id}`, JSON.stringify(paidObj))
-          localStorage.setItem(`verse_invoice_${cleanNoPrefix}`, JSON.stringify(paidObj))
-          localStorage.setItem(`verse_invoice_INV-${cleanNoPrefix}`, JSON.stringify(paidObj))
-          if (invoice.invoiceNumber) {
-            const numClean = invoice.invoiceNumber.replace(/^inv-?/i, "")
-            localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
-            localStorage.setItem(`verse_invoice_${numClean}`, JSON.stringify(paidObj))
-            localStorage.setItem(`verse_invoice_INV-${numClean}`, JSON.stringify(paidObj))
-          }
-        }
-      } catch {}
       if (onSuccess) onSuccess()
       if (onPaid) onPaid()
     } catch (err: any) {

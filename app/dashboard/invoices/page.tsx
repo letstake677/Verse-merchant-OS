@@ -54,63 +54,89 @@ export default function InvoicesPage() {
 
   const [refreshIndex, setRefreshIndex] = React.useState(0)
 
-  // Trigger query on page, filter, or retry change
-  React.useEffect(() => {
-    let isMounted = true
+  const [isRefreshing, setIsRefreshing] = React.useState(false)
 
-    async function loadInvoices() {
+  const loadInvoices = React.useCallback(async (silent = false) => {
+    if (!silent) {
       setIsLoading(true)
       setError(null)
+    } else {
+      setIsRefreshing(true)
+    }
 
-      try {
-        const searchTerms = [filters.search, filters.customer].filter(Boolean).join(" ").trim()
-        const params = new URLSearchParams()
-        params.set("page", currentPage.toString())
-        params.set("limit", "20")
+    try {
+      const searchTerms = [filters.search, filters.customer].filter(Boolean).join(" ").trim()
+      const params = new URLSearchParams()
+      params.set("page", currentPage.toString())
+      params.set("limit", "20")
 
-        if (searchTerms) {
-          params.set("search", searchTerms)
-        }
-        if (filters.status && filters.status !== "all") {
-          params.set("status", filters.status)
-        }
-        if (filters.dateRange && filters.dateRange !== "all") {
-          params.set("dateRange", filters.dateRange)
-        }
+      if (searchTerms) {
+        params.set("search", searchTerms)
+      }
+      if (filters.status && filters.status !== "all") {
+        params.set("status", filters.status)
+      }
+      if (filters.dateRange && filters.dateRange !== "all") {
+        params.set("dateRange", filters.dateRange)
+      }
 
-        const res = await fetch(`/api/invoices?${params.toString()}`)
-        const data = await res.json()
+      const res = await fetch(`/api/invoices?${params.toString()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      })
+      const data = await res.json()
 
-        if (!isMounted) return
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Failed to load invoices from database.")
+      }
 
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || "Failed to load invoices from database.")
-        }
-
-        setInvoices(data.invoices || [])
-        if (data.pagination) {
-          setPagination(data.pagination)
-        }
-        if (data.summary) {
-          setSummary(data.summary)
-        }
-      } catch (err) {
-        if (!isMounted) return
+      setInvoices(data.invoices || [])
+      if (data.pagination) {
+        setPagination(data.pagination)
+      }
+      if (data.summary) {
+        setSummary(data.summary)
+      }
+    } catch (err) {
+      if (!silent) {
         const msg = err instanceof Error ? err.message : "Failed to load invoices."
         setError(msg)
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
+      }
+    } finally {
+      if (!silent) {
+        setIsLoading(false)
+      }
+      setIsRefreshing(false)
+    }
+  }, [filters, currentPage])
+
+  // Trigger query on page, filter, or retry change
+  React.useEffect(() => {
+    loadInvoices(false)
+  }, [loadInvoices, refreshIndex])
+
+  // Real-time polling: auto-refresh every 4 seconds so merchant sees customer payments live
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      loadInvoices(true)
+    }, 4000)
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        loadInvoices(true)
       }
     }
-
-    loadInvoices()
+    document.addEventListener("visibilitychange", handleVisibility)
 
     return () => {
-      isMounted = false
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", handleVisibility)
     }
-  }, [filters, currentPage, refreshIndex])
+  }, [loadInvoices])
+
+  const handleRefresh = () => {
+    loadInvoices(true)
+  }
 
   // Handle filter changes (resets page to 1)
   const handleFiltersChange = (newFilters: InvoiceFiltersState) => {
@@ -164,7 +190,7 @@ export default function InvoicesPage() {
       currentSectionTitle="Invoices"
     >
       {/* Invoices Header */}
-      <InvoiceHeader />
+      <InvoiceHeader onRefresh={handleRefresh} isRefreshing={isRefreshing} />
 
       {/* 3. Summary Cards */}
       <InvoiceSummary

@@ -21,14 +21,18 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "20", 10)
 
     const [invoicesResult, summary] = await Promise.all([
-      InvoiceRepository.findInvoicesWithPagination(session.merchantId, {
-        search,
-        status: status && status !== "all" ? (status as InvoiceStatus) : undefined,
-        dateRange: dateRange as any,
-        page,
-        limit,
-      }),
-      InvoiceRepository.getMerchantInvoiceSummary(session.merchantId)
+      InvoiceRepository.findInvoicesWithPagination(
+        session.merchantId,
+        {
+          search,
+          status: status && status !== "all" ? (status as InvoiceStatus) : undefined,
+          dateRange: dateRange as any,
+          page,
+          limit,
+        },
+        session.walletAddress
+      ),
+      InvoiceRepository.getMerchantInvoiceSummary(session.merchantId, session.walletAddress),
     ])
 
     return NextResponse.json({

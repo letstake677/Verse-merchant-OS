@@ -249,7 +249,8 @@ export class InvoiceRepository {
    */
   static async findInvoicesWithPagination(
     merchantId: string,
-    options: InvoiceQueryOptions = {}
+    options: InvoiceQueryOptions = {},
+    walletAddress?: string
   ): Promise<{
     invoices: Invoice[]
     pagination: {
@@ -259,7 +260,7 @@ export class InvoiceRepository {
       totalPages: number
     }
   }> {
-    if (!merchantId) {
+    if (!merchantId && !walletAddress) {
       return {
         invoices: [],
         pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
@@ -268,12 +269,22 @@ export class InvoiceRepository {
 
     try {
       const collection = await this.getCollection()
+      const merchantOrClauses: any[] = [
+        { merchantId },
+        { merchantId: "shared_merchant" },
+      ]
+
+      if (walletAddress && walletAddress.startsWith("0x")) {
+        merchantOrClauses.push({ merchantId: walletAddress })
+        merchantOrClauses.push({ merchantId: walletAddress.toLowerCase() })
+        merchantOrClauses.push({ paymentAddress: walletAddress })
+        merchantOrClauses.push({ paymentAddress: walletAddress.toLowerCase() })
+        merchantOrClauses.push({ paymentAddress: { $regex: new RegExp(`^${escapeRegex(walletAddress)}$`, "i") } })
+      }
+
       const andConditions: any[] = [
         {
-          $or: [
-            { merchantId },
-            { merchantId: "shared_merchant" },
-          ],
+          $or: merchantOrClauses,
         },
       ]
 
@@ -349,9 +360,10 @@ export class InvoiceRepository {
    * Aggregates real invoice metrics for merchant summary cards.
    */
   static async getMerchantInvoiceSummary(
-    merchantId: string
+    merchantId: string,
+    walletAddress?: string
   ): Promise<InvoiceSummaryMetrics> {
-    if (!merchantId) {
+    if (!merchantId && !walletAddress) {
       return {
         totalInvoices: 0,
         draftCount: 0,
@@ -362,12 +374,22 @@ export class InvoiceRepository {
 
     try {
       const collection = await this.getCollection()
+      const merchantOrClauses: any[] = [
+        { merchantId },
+        { merchantId: "shared_merchant" },
+      ]
+
+      if (walletAddress && walletAddress.startsWith("0x")) {
+        merchantOrClauses.push({ merchantId: walletAddress })
+        merchantOrClauses.push({ merchantId: walletAddress.toLowerCase() })
+        merchantOrClauses.push({ paymentAddress: walletAddress })
+        merchantOrClauses.push({ paymentAddress: walletAddress.toLowerCase() })
+        merchantOrClauses.push({ paymentAddress: { $regex: new RegExp(`^${escapeRegex(walletAddress)}$`, "i") } })
+      }
+
       const docs = await collection
         .find({
-          $or: [
-            { merchantId },
-            { merchantId: "shared_merchant" },
-          ],
+          $or: merchantOrClauses,
         })
         .project<{ status: InvoiceStatus; total: string }>({ status: 1, total: 1 })
         .toArray()
@@ -480,6 +502,16 @@ export class InvoiceRepository {
         }
       }
 
+      let paidAtObj: Date | undefined
+      if (input.paidAt) {
+        paidAtObj = input.paidAt instanceof Date ? input.paidAt : new Date(input.paidAt)
+        if (isNaN(paidAtObj.getTime())) {
+          paidAtObj = input.status === "paid" ? now : undefined
+        }
+      } else if (input.status === "paid") {
+        paidAtObj = now
+      }
+
       const newDoc: InvoiceDocument = {
         _id: new ObjectId(),
         merchantId: input.merchantId,
@@ -505,7 +537,7 @@ export class InvoiceRepository {
         paymentAddress: input.paymentAddress || "",
         createdAt: now,
         updatedAt: now,
-        paidAt: undefined,
+        paidAt: paidAtObj,
         paymentId: input.paymentId,
       }
 
