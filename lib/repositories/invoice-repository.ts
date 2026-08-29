@@ -662,29 +662,48 @@ export class InvoiceRepository {
     try {
       const collection = await this.getCollection()
       const now = new Date()
+      const cleanId = decodeURIComponent(invoiceId).trim()
 
-      const query: any = {}
-      if (ObjectId.isValid(invoiceId)) {
-        query._id = new ObjectId(invoiceId)
-      } else {
-        query.invoiceNumber = invoiceId.trim()
+      const orClauses: any[] = [
+        { invoiceNumber: cleanId },
+        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
+      ]
+      if (ObjectId.isValid(cleanId)) {
+        orClauses.push({ _id: new ObjectId(cleanId) })
       }
+      orClauses.push({ _id: cleanId })
+
+      let updatedDoc = null
+
       if (merchantId) {
-        query.merchantId = merchantId
+        updatedDoc = await collection.findOneAndUpdate(
+          { merchantId, $or: orClauses },
+          {
+            $set: {
+              status: "paid" as InvoiceStatus,
+              paymentId: paymentId || undefined,
+              paidAt: paidAtDate,
+              updatedAt: now,
+            },
+          },
+          { returnDocument: "after" }
+        )
       }
 
-      const updatedDoc = await collection.findOneAndUpdate(
-        query,
-        {
-          $set: {
-            status: "paid" as InvoiceStatus,
-            paymentId: paymentId || undefined,
-            paidAt: paidAtDate,
-            updatedAt: now,
+      if (!updatedDoc) {
+        updatedDoc = await collection.findOneAndUpdate(
+          { $or: orClauses },
+          {
+            $set: {
+              status: "paid" as InvoiceStatus,
+              paymentId: paymentId || undefined,
+              paidAt: paidAtDate,
+              updatedAt: now,
+            },
           },
-        },
-        { returnDocument: "after" }
-      )
+          { returnDocument: "after" }
+        )
+      }
 
       if (!updatedDoc) return null
       return serializeInvoiceDocument(updatedDoc)

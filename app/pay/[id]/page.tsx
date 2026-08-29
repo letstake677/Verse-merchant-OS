@@ -101,34 +101,7 @@ export default function PublicPayPage() {
 
     const cleanId = decodeURIComponent(id).trim()
 
-    // 1. Check if URL contains embedded compressed snapshot data (?d=...)
-    let dataParam = searchParams?.get("d")
-    if (!dataParam && typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search)
-      dataParam = urlParams.get("d")
-    }
-
-    if (dataParam) {
-      const decoded = decodeInvoiceFromUrlParam(dataParam)
-      if (decoded) {
-        setInvoice(decoded)
-        setIsLoading(false)
-        // Store in localStorage & async sync with backend
-        try {
-          if (typeof window !== "undefined") {
-            localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(decoded))
-          }
-          fetch("/api/invoices/sync", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(decoded),
-          }).catch(() => {})
-        } catch {}
-        return
-      }
-    }
-
-    // 2. Fetch from backend API
+    // 1. First, fetch real-time invoice status directly from backend API
     try {
       const res = await fetch(`/api/invoices/${encodeURIComponent(cleanId)}`)
       if (res.ok) {
@@ -143,7 +116,47 @@ export default function PublicPayPage() {
         }
       }
     } catch {
-      // Backend fetch failed, check local storage next
+      // Backend fetch failed, continue to snapshot sync
+    }
+
+    // 2. Check if URL contains embedded compressed snapshot data (?d=...)
+    let dataParam = searchParams?.get("d")
+    if (!dataParam && typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search)
+      dataParam = urlParams.get("d")
+    }
+
+    if (dataParam) {
+      const decoded = decodeInvoiceFromUrlParam(dataParam)
+      if (decoded) {
+        // Sync decoded invoice with backend DB to retrieve authoritatively updated DB status
+        try {
+          const syncRes = await fetch("/api/invoices/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(decoded),
+          })
+          if (syncRes.ok) {
+            const syncData = await syncRes.json()
+            if (syncData.invoice) {
+              setInvoice(syncData.invoice)
+              if (typeof window !== "undefined") {
+                localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(syncData.invoice))
+              }
+              setIsLoading(false)
+              return
+            }
+          }
+        } catch {}
+
+        // Fallback to decoded static snapshot if sync failed
+        setInvoice(decoded)
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(decoded))
+        }
+        setIsLoading(false)
+        return
+      }
     }
 
     // 3. Fallback to local storage cache
@@ -965,8 +978,28 @@ export default function PublicPayPage() {
           invoice={invoice}
           isOpen={isPayOpen}
           onClose={() => setIsPayOpen(false)}
+          onSuccess={() => {
+            const cleanId = decodeURIComponent(id).trim()
+            const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
+            setInvoice(paidObj)
+            if (typeof window !== "undefined") {
+              localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(paidObj))
+              if (invoice.invoiceNumber) {
+                localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
+              }
+            }
+            setIsPayOpen(false)
+          }}
           onPaid={() => {
-            setInvoice({ ...invoice, status: "paid", paidAt: new Date().toISOString() })
+            const cleanId = decodeURIComponent(id).trim()
+            const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
+            setInvoice(paidObj)
+            if (typeof window !== "undefined") {
+              localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(paidObj))
+              if (invoice.invoiceNumber) {
+                localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
+              }
+            }
             setIsPayOpen(false)
           }}
         />
@@ -978,7 +1011,15 @@ export default function PublicPayPage() {
           isOpen={isQrModalOpen}
           onClose={() => setIsQrModalOpen(false)}
           onPaid={() => {
-            setInvoice({ ...invoice, status: "paid", paidAt: new Date().toISOString() })
+            const cleanId = decodeURIComponent(id).trim()
+            const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
+            setInvoice(paidObj)
+            if (typeof window !== "undefined") {
+              localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(paidObj))
+              if (invoice.invoiceNumber) {
+                localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
+              }
+            }
             setIsQrModalOpen(false)
           }}
         />

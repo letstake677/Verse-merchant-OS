@@ -33,6 +33,7 @@ interface InvoicePaymentModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
+  onPaid?: () => void
 }
 
 export function InvoicePaymentModal({
@@ -40,6 +41,7 @@ export function InvoicePaymentModal({
   isOpen,
   onClose,
   onSuccess,
+  onPaid,
 }: InvoicePaymentModalProps) {
   const { open } = useAppKit()
   const { address, isConnected, status, chainId } = useAccount()
@@ -235,7 +237,17 @@ export function InvoicePaymentModal({
       }
 
       setPaymentSuccess(true)
+      try {
+        if (typeof window !== "undefined") {
+          const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
+          localStorage.setItem(`verse_invoice_${invoice.id}`, JSON.stringify(paidObj))
+          if (invoice.invoiceNumber) {
+            localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
+          }
+        }
+      } catch {}
       if (onSuccess) onSuccess()
+      if (onPaid) onPaid()
     } catch (err: any) {
       console.error("[Payment Error]:", err)
       const rawMsg = err?.shortMessage || err?.message || ""
