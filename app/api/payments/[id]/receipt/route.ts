@@ -22,29 +22,62 @@ export async function GET(
   try {
     const { id } = await params
 
-    if (!id || typeof id !== "string" || !/^[0-9a-fA-F]{24}$/.test(id.trim())) {
+    if (!id || typeof id !== "string" || id.trim().length === 0) {
       return NextResponse.json(
-        { ok: false, message: "Invalid payment receipt ID format." },
+        { ok: false, message: "Payment receipt identifier is required." },
         { status: 400 }
       )
     }
 
-    const paymentId = id.trim()
+    const paymentId = decodeURIComponent(id).trim()
 
     // 1. Fetch payment record
-    const payment = await PaymentRepository.findById(paymentId)
-    if (!payment) {
+    let payment = await PaymentRepository.findById(paymentId)
+    let invoice = null
+
+    if (payment) {
+      invoice = await InvoiceRepository.findById(payment.invoiceId)
+    } else {
+      // Direct invoice lookup fallback
+      invoice = await InvoiceRepository.findById(paymentId)
+      if (invoice && invoice.paymentId) {
+        payment = await PaymentRepository.findById(invoice.paymentId)
+      }
+    }
+
+    if (!invoice && !payment) {
       return NextResponse.json(
         { ok: false, message: "Receipt unavailable. Payment record not found." },
         { status: 404 }
       )
     }
 
-    // 2. Fetch associated invoice
-    const invoice = await InvoiceRepository.findById(payment.invoiceId)
-    if (!invoice) {
+    // Synthesize payment object if invoice is paid but standalone payment doc was omitted
+    if (!payment && invoice && invoice.status === "paid") {
+      payment = {
+        id: invoice.paymentId || invoice.id,
+        invoiceId: invoice.id,
+        merchantId: invoice.merchantId,
+        amount: invoice.total,
+        currency: invoice.currency || "USD",
+        token: {
+          symbol: "USDC",
+          name: "USD Coin",
+          decimals: 6,
+          isNative: false,
+        },
+        status: "confirmed",
+        transactionHash: (invoice as any).transactionHash || "",
+        payerAddress: (invoice as any).payerAddress || "Customer Wallet",
+        recipientAddress: invoice.paymentAddress || "",
+        createdAt: invoice.createdAt,
+        confirmedAt: invoice.paidAt ? new Date(invoice.paidAt).toISOString() : new Date().toISOString(),
+      } as any
+    }
+
+    if (!payment || !invoice) {
       return NextResponse.json(
-        { ok: false, message: "Receipt unavailable. Associated invoice not found." },
+        { ok: false, message: "Receipt unavailable. Associated record not found." },
         { status: 404 }
       )
     }

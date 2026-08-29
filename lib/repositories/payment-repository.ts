@@ -64,22 +64,40 @@ export class PaymentRepository {
   }
 
   /**
-   * Finds a payment by its ID without merchant scoping (for public payment verifier).
+   * Finds a payment by its ID or reference without merchant scoping (for public payment verifier & receipts).
    */
   static async findById(paymentId: string): Promise<Payment | null> {
-    if (!paymentId || !ObjectId.isValid(paymentId)) return null
+    if (!paymentId) return null
 
     try {
       const collection = await this.getCollection()
-      const doc = await collection.findOne({
-        _id: new ObjectId(paymentId),
-      })
+      const cleanId = paymentId.trim()
+      const cleanNoPrefix = cleanId.replace(/^pay-?/i, "").replace(/^inv-?/i, "")
+
+      const orClauses: any[] = [
+        { id: cleanId },
+        { id: cleanNoPrefix },
+        { id: `PAY-${cleanNoPrefix}` },
+        { reference: cleanId },
+        { reference: cleanNoPrefix },
+        { reference: `PAY-${cleanNoPrefix}` },
+        { transactionHash: cleanId.toLowerCase() },
+        { invoiceId: cleanId },
+        { invoiceId: cleanNoPrefix },
+        { invoiceId: `INV-${cleanNoPrefix}` },
+      ]
+
+      if (ObjectId.isValid(cleanId)) {
+        orClauses.push({ _id: new ObjectId(cleanId) })
+      }
+
+      const doc = await collection.findOne({ $or: orClauses })
 
       if (!doc) return null
       return serializePaymentDocument(doc)
     } catch (error) {
       console.error("[PaymentRepository.findById] Error:", error)
-      throw new Error("Failed to query payment record.")
+      return null
     }
   }
 

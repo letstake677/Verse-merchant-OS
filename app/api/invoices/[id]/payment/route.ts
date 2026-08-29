@@ -47,8 +47,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Check if this transaction hash has already been used
     const existingTx = await PaymentRepository.findByTransactionHashGlobal(cleanTxHash)
-    if (existingTx && existingTx.invoiceId !== invoice.id) {
-      return NextResponse.json({ ok: false, error: "This transaction hash has already been used for another invoice." }, { status: 400 })
+    if (existingTx) {
+      const matchesCurrentInvoice =
+        existingTx.invoiceId === invoice.id ||
+        existingTx.invoiceId === invoice.invoiceNumber ||
+        existingTx.invoiceId.replace(/^inv-?/i, "") === invoice.id.replace(/^inv-?/i, "") ||
+        existingTx.invoiceId.replace(/^inv-?/i, "") === (invoice.invoiceNumber || "").replace(/^inv-?/i, "")
+      if (!matchesCurrentInvoice) {
+        return NextResponse.json({ ok: false, error: "This transaction hash has already been used for another invoice." }, { status: 400 })
+      }
     }
 
     const numericTotal = parseFloat(invoice.total || "0")

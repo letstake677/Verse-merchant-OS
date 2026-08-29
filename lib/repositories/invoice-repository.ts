@@ -53,16 +53,38 @@ export class InvoiceRepository {
         { invoiceNumber: invPrefixed },
         { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
         { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
+        { id: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
         { _id: cleanId as any },
       ]
       if (ObjectId.isValid(cleanId)) {
         orClauses.push({ _id: new ObjectId(cleanId) })
       }
 
-      const doc = await collection.findOne({ $or: orClauses })
+      const docs = await collection.find({ $or: orClauses }).toArray()
+      if (!docs || docs.length === 0) return null
 
-      if (!doc) return null
-      return serializeInvoiceDocument(doc)
+      // Check if any matching record is marked as paid
+      const paidDoc = docs.find((d) => d.status === "paid")
+      if (paidDoc) {
+        const unpaidDocs = docs.filter((d) => d.status !== "paid")
+        if (unpaidDocs.length > 0) {
+          const idsToUpdate = docs.map((d) => d._id)
+          await collection.updateMany(
+            { _id: { $in: idsToUpdate } },
+            {
+              $set: {
+                status: "paid" as InvoiceStatus,
+                paidAt: paidDoc.paidAt || new Date(),
+                paymentId: paidDoc.paymentId,
+                updatedAt: new Date(),
+              },
+            }
+          )
+        }
+        return serializeInvoiceDocument({ ...paidDoc, status: "paid" })
+      }
+
+      return serializeInvoiceDocument(docs[0])
     } catch (error) {
       console.error("[InvoiceRepository.findById] Error:", error)
       return null
@@ -81,21 +103,41 @@ export class InvoiceRepository {
       const invPrefixed = `INV-${cleanNoPrefix}`
       const collection = await this.getCollection()
 
-      const doc = await collection.findOne({
-        $or: [
-          { invoiceNumber: cleanNumber },
-          { invoiceNumber: cleanNoPrefix },
-          { invoiceNumber: invPrefixed },
-          { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNumber)}$`, "i") } },
-          { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
-          { id: cleanNumber },
-          { id: cleanNoPrefix },
-          { id: invPrefixed },
-        ],
-      })
+      const orClauses: any[] = [
+        { invoiceNumber: cleanNumber },
+        { invoiceNumber: cleanNoPrefix },
+        { invoiceNumber: invPrefixed },
+        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNumber)}$`, "i") } },
+        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
+        { id: cleanNumber },
+        { id: cleanNoPrefix },
+        { id: invPrefixed },
+      ]
 
-      if (!doc) return null
-      return serializeInvoiceDocument(doc)
+      const docs = await collection.find({ $or: orClauses }).toArray()
+      if (!docs || docs.length === 0) return null
+
+      const paidDoc = docs.find((d) => d.status === "paid")
+      if (paidDoc) {
+        const unpaidDocs = docs.filter((d) => d.status !== "paid")
+        if (unpaidDocs.length > 0) {
+          const idsToUpdate = docs.map((d) => d._id)
+          await collection.updateMany(
+            { _id: { $in: idsToUpdate } },
+            {
+              $set: {
+                status: "paid" as InvoiceStatus,
+                paidAt: paidDoc.paidAt || new Date(),
+                paymentId: paidDoc.paymentId,
+                updatedAt: new Date(),
+              },
+            }
+          )
+        }
+        return serializeInvoiceDocument({ ...paidDoc, status: "paid" })
+      }
+
+      return serializeInvoiceDocument(docs[0])
     } catch (error) {
       console.error("[InvoiceRepository.findByInvoiceNumber] Error:", error)
       return null
@@ -701,15 +743,44 @@ export class InvoiceRepository {
         { invoiceNumber: invPrefixed },
         { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
         { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
+        { id: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
         { _id: cleanId as any },
       ]
       if (ObjectId.isValid(cleanId)) {
         orClauses.push({ _id: new ObjectId(cleanId) })
       }
 
+      // Collect all matching documents to ensure every linked variant is updated
+      const existingDocs = await collection.find({ $or: orClauses }).toArray()
+      const idsToUpdate: any[] = []
+      const numbersToUpdate: string[] = []
+
+      existingDocs.forEach((d) => {
+        if (d._id) idsToUpdate.push(d._id)
+        if (d.invoiceNumber) {
+          numbersToUpdate.push(d.invoiceNumber)
+          const noPref = d.invoiceNumber.replace(/^inv-?/i, "")
+          numbersToUpdate.push(noPref)
+          numbersToUpdate.push(`INV-${noPref}`)
+        }
+        if (d.id) {
+          numbersToUpdate.push(d.id)
+          const noPref = d.id.replace(/^inv-?/i, "")
+          numbersToUpdate.push(noPref)
+          numbersToUpdate.push(`INV-${noPref}`)
+        }
+      })
+
+      const finalOr: any[] = [...orClauses]
+      if (idsToUpdate.length > 0) finalOr.push({ _id: { $in: idsToUpdate } })
+      if (numbersToUpdate.length > 0) {
+        finalOr.push({ invoiceNumber: { $in: numbersToUpdate } })
+        finalOr.push({ id: { $in: numbersToUpdate } })
+      }
+
       // Atomically update ALL matching documents in MongoDB across merchant IDs to status "paid"
       await collection.updateMany(
-        { $or: orClauses },
+        { $or: finalOr },
         {
           $set: {
             status: "paid" as InvoiceStatus,
@@ -720,9 +791,9 @@ export class InvoiceRepository {
         }
       )
 
-      const updatedDoc = await collection.findOne({ $or: orClauses })
+      const updatedDoc = await collection.findOne({ $or: finalOr })
       if (!updatedDoc) return null
-      return serializeInvoiceDocument(updatedDoc)
+      return serializeInvoiceDocument({ ...updatedDoc, status: "paid" })
     } catch (error) {
       console.error("[InvoiceRepository.markInvoicePaid] Error:", error)
       throw new Error("Failed to mark invoice as paid.")

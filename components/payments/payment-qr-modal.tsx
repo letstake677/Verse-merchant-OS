@@ -22,6 +22,7 @@ import {
   Smartphone,
   CheckCircle2,
   AlertCircle,
+  Clock,
 } from "lucide-react"
 
 interface PaymentQrModalProps {

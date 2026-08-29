@@ -123,11 +123,18 @@ export async function POST(
     if (txHash && /^0x([A-Fa-f0-9]{64})$/.test(txHash)) {
       // Replay Protection: ensure transaction hash was not already used for another invoice
       const globalPaymentMatch = await PaymentRepository.findByTransactionHashGlobal(txHash)
-      if (globalPaymentMatch && globalPaymentMatch.invoiceId !== invoice.id) {
-        return NextResponse.json(
-          { ok: false, message: "This transaction hash has already been used for another payment." },
-          { status: 400 }
-        )
+      if (globalPaymentMatch) {
+        const matchesCurrentInvoice =
+          globalPaymentMatch.invoiceId === invoice.id ||
+          globalPaymentMatch.invoiceId === invoice.invoiceNumber ||
+          globalPaymentMatch.invoiceId.replace(/^inv-?/i, "") === invoice.id.replace(/^inv-?/i, "") ||
+          globalPaymentMatch.invoiceId.replace(/^inv-?/i, "") === (invoice.invoiceNumber || "").replace(/^inv-?/i, "")
+        if (!matchesCurrentInvoice) {
+          return NextResponse.json(
+            { ok: false, message: "This transaction hash has already been used for another payment." },
+            { status: 400 }
+          )
+        }
       }
 
       let receipt: any = null

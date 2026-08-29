@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const search = searchParams.get("search") || undefined
     const status = searchParams.get("status") || undefined
+    const dateRange = searchParams.get("dateRange") || undefined
     const page = parseInt(searchParams.get("page") || "1", 10)
     const limit = parseInt(searchParams.get("limit") || "20", 10)
 
@@ -23,6 +24,7 @@ export async function GET(req: NextRequest) {
       InvoiceRepository.findInvoicesWithPagination(session.merchantId, {
         search,
         status: status && status !== "all" ? (status as InvoiceStatus) : undefined,
+        dateRange: dateRange as any,
         page,
         limit,
       }),
