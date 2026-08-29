@@ -110,7 +110,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         ;(invoice as any).payments = mappedPayments
 
         const hasConfirmedPayment = payments.some(
-          (p) => p.status === "confirmed" || p.status === "paid"
+          (p) => p.status === "confirmed" || p.status === "paid" || !!p.transactionHash
         )
         if (hasConfirmedPayment && invoice.status !== "paid") {
           invoice.status = "paid"

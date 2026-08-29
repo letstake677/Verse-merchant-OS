@@ -159,7 +159,24 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
       const data = await res.json()
       if (data.ok && (data.isPaid || data.status === "paid")) {
         setIsDetectedPaid(true)
-        if (onPaid) onPaid()
+        const paidInvoiceData = {
+          ...invoice,
+          status: "paid",
+          paidAt: new Date().toISOString(),
+          paymentId: cleanHash,
+          payments: [
+            {
+              id: cleanHash,
+              amount: tokenCalc.tokenAmount,
+              currency: invoice.currency,
+              token: activeToken,
+              txHash: cleanHash,
+              status: "confirmed",
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        }
+        if (onPaid) onPaid(paidInvoiceData)
       } else {
         setTxError(data.message || "Could not verify transaction on Polygon. Please check the hash.")
       }

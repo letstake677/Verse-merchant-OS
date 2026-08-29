@@ -12,13 +12,20 @@ export async function POST(req: NextRequest) {
     }
 
     const targetId = body.id || body.invoiceNumber
-    const existing = await InvoiceRepository.findById(targetId)
+    let existing = await InvoiceRepository.findById(targetId)
+    if (!existing && body.invoiceNumber) {
+      existing = await InvoiceRepository.findByInvoiceNumber(body.invoiceNumber)
+    }
+    if (!existing && body.id) {
+      existing = await InvoiceRepository.findByInvoiceNumber(body.id)
+    }
+
     if (existing) {
-      if (body.status === "paid") {
+      if (body.status === "paid" || existing.status === "paid") {
         const updated = await InvoiceRepository.markInvoicePaid(
           existing.id || targetId,
           existing.merchantId,
-          body.paymentId
+          body.paymentId || existing.paymentId
         )
         return NextResponse.json({ ok: true, invoice: updated || { ...existing, status: "paid" } })
       }

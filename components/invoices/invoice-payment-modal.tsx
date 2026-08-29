@@ -268,9 +268,27 @@ export function InvoicePaymentModal({
         console.warn("MongoDB sync notice:", syncErr)
       }
 
+      const paidInvoiceData = {
+        ...invoice,
+        status: "paid",
+        paidAt: new Date().toISOString(),
+        paymentId: hash,
+        payments: [
+          {
+            id: hash,
+            amount: tokenCalc.tokenAmount,
+            currency: invoice.currency,
+            token: activeToken,
+            txHash: hash,
+            status: "confirmed",
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }
+
       setPaymentSuccess(true)
-      if (onSuccess) onSuccess()
-      if (onPaid) onPaid()
+      if (onPaid) onPaid(paidInvoiceData)
+      if (onSuccess) onSuccess(paidInvoiceData)
     } catch (err: any) {
       console.error("[Payment Error]:", err)
       const rawMsg = err?.shortMessage || err?.message || ""

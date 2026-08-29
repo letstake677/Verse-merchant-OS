@@ -112,7 +112,18 @@ export default function PublicPayPage() {
       if (res.ok) {
         const data = await res.json()
         if (data.invoice) {
-          setInvoice(data.invoice)
+          setInvoice((prev) => {
+            if (prev?.status === "paid" && data.invoice.status !== "paid") {
+              return {
+                ...data.invoice,
+                status: "paid",
+                paidAt: prev.paidAt,
+                paymentId: prev.paymentId,
+                payments: prev.payments || data.invoice.payments,
+              }
+            }
+            return data.invoice
+          })
           setIsLoading(false)
           return
         }
@@ -140,14 +151,30 @@ export default function PublicPayPage() {
           if (syncRes.ok) {
             const syncData = await syncRes.json()
             if (syncData.invoice) {
-              setInvoice(syncData.invoice)
+              setInvoice((prev) => {
+                if (prev?.status === "paid" && syncData.invoice.status !== "paid") {
+                  return {
+                    ...syncData.invoice,
+                    status: "paid",
+                    paidAt: prev.paidAt,
+                    paymentId: prev.paymentId,
+                    payments: prev.payments,
+                  }
+                }
+                return syncData.invoice
+              })
               setIsLoading(false)
               return
             }
           }
         } catch {}
 
-        setInvoice(decoded)
+        setInvoice((prev) => {
+          if (prev?.status === "paid" && decoded.status !== "paid") {
+            return { ...decoded, status: "paid", paidAt: prev.paidAt, paymentId: prev.paymentId }
+          }
+          return decoded
+        })
         setIsLoading(false)
         return
       }
@@ -969,14 +996,17 @@ export default function PublicPayPage() {
         <InvoicePaymentModal
           invoice={invoice}
           isOpen={isPayOpen}
-          onClose={() => setIsPayOpen(false)}
-          onSuccess={() => {
-            fetchInvoice(true)
+          onClose={() => {
             setIsPayOpen(false)
+            fetchInvoice(true)
           }}
-          onPaid={() => {
+          onSuccess={(paidData) => {
+            if (paidData) setInvoice(paidData)
             fetchInvoice(true)
-            setIsPayOpen(false)
+          }}
+          onPaid={(paidData) => {
+            if (paidData) setInvoice(paidData)
+            fetchInvoice(true)
           }}
         />
       )}
@@ -985,10 +1015,13 @@ export default function PublicPayPage() {
         <PaymentQrModal
           invoice={invoice}
           isOpen={isQrModalOpen}
-          onClose={() => setIsQrModalOpen(false)}
-          onPaid={() => {
-            fetchInvoice(true)
+          onClose={() => {
             setIsQrModalOpen(false)
+            fetchInvoice(true)
+          }}
+          onPaid={(paidData) => {
+            if (paidData) setInvoice(paidData)
+            fetchInvoice(true)
           }}
         />
       )}

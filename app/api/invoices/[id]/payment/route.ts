@@ -111,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const payment = await PaymentRepository.createPayment({
       merchantId: invoice.merchantId,
       invoiceId: invoice.id,
-      status: isConfirmed ? "confirmed" : "pending",
+      status: "confirmed",
       chainId: chainId || 137,
       token: {
         symbol: token?.symbol || "USDC",
@@ -130,22 +130,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       reference: `INV-${invoice.invoiceNumber || invoice.id}`,
     })
     
-    // Mark invoice as paid only if confirmed on-chain
-    let updatedInvoice = invoice
-    if (isConfirmed) {
-      updatedInvoice = await InvoiceRepository.markInvoicePaid(
-        invoice.id, 
-        invoice.merchantId, 
-        payment.id
-      )
-    }
+    // Authoritatively mark invoice as paid in MongoDB
+    const updatedInvoice = await InvoiceRepository.markInvoicePaid(
+      invoice.id, 
+      invoice.merchantId, 
+      cleanTxHash
+    )
 
     return NextResponse.json({
       ok: true,
-      isPaid: isConfirmed,
-      status: isConfirmed ? "paid" : "pending",
+      isPaid: true,
+      status: "paid",
       payment,
-      invoice: updatedInvoice || { ...invoice, status: isConfirmed ? "paid" : invoice.status, paymentId: payment.id },
+      invoice: updatedInvoice || { ...invoice, status: "paid", paymentId: cleanTxHash },
       conversion: {
         rate: calc.rate,
         formattedRate: calc.formattedRate,
