@@ -187,7 +187,22 @@ export function InvoicePaymentModal({
       setTxHash(hash)
       setIsVerifying(true)
 
-      // 1. Submit initial payment record to server
+      // 1. Immediately update invoice status to paid in backend database
+      try {
+        await fetch("/api/invoices/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...invoice,
+            status: "paid",
+            paidAt: new Date().toISOString(),
+            paymentId: hash,
+          }),
+        })
+      } catch (err) {
+        console.warn("Immediate sync notice:", err)
+      }
+
       try {
         await fetch(`/api/invoices/${invoice.id}/payment`, {
           method: "POST",

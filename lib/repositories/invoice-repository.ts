@@ -226,19 +226,29 @@ export class InvoiceRepository {
 
     try {
       const collection = await this.getCollection()
-      const filter: Filter<InvoiceDocument> = { merchantId }
+      const andConditions: any[] = [
+        {
+          $or: [
+            { merchantId },
+            { merchantId: "shared_merchant" },
+          ],
+        },
+      ]
 
       if (options.status && options.status !== "all") {
-        filter.status = options.status
+        andConditions.push({ status: options.status })
       }
 
       if (options.search && options.search.trim()) {
         const cleanSearch = escapeRegex(options.search.trim())
-        filter.$or = [
-          { invoiceNumber: { $regex: cleanSearch, $options: "i" } },
-          { customerName: { $regex: cleanSearch, $options: "i" } },
-          { customerEmail: { $regex: cleanSearch, $options: "i" } },
-        ]
+        andConditions.push({
+          $or: [
+            { invoiceNumber: { $regex: cleanSearch, $options: "i" } },
+            { customerName: { $regex: cleanSearch, $options: "i" } },
+            { customerEmail: { $regex: cleanSearch, $options: "i" } },
+            { id: { $regex: cleanSearch, $options: "i" } },
+          ],
+        })
       }
 
       if (options.dateRange && options.dateRange !== "all") {
@@ -256,9 +266,11 @@ export class InvoiceRepository {
         }
 
         if (startDate) {
-          filter.createdAt = { $gte: startDate }
+          andConditions.push({ createdAt: { $gte: startDate } })
         }
       }
+
+      const filter: Filter<InvoiceDocument> = { $and: andConditions }
 
       const page = Math.max(1, options.page || 1)
       const limit = Math.min(Math.max(1, options.limit || 20), 50)
@@ -309,7 +321,12 @@ export class InvoiceRepository {
     try {
       const collection = await this.getCollection()
       const docs = await collection
-        .find({ merchantId })
+        .find({
+          $or: [
+            { merchantId },
+            { merchantId: "shared_merchant" },
+          ],
+        })
         .project<{ status: InvoiceStatus; total: string }>({ status: 1, total: 1 })
         .toArray()
 
@@ -690,38 +707,20 @@ export class InvoiceRepository {
         orClauses.push({ _id: new ObjectId(cleanId) })
       }
 
-      let updatedDoc = null
-
-      if (merchantId) {
-        updatedDoc = await collection.findOneAndUpdate(
-          { merchantId, $or: orClauses },
-          {
-            $set: {
-              status: "paid" as InvoiceStatus,
-              paymentId: paymentId || undefined,
-              paidAt: paidAtDate,
-              updatedAt: now,
-            },
+      // Atomically update ALL matching documents in MongoDB across merchant IDs to status "paid"
+      await collection.updateMany(
+        { $or: orClauses },
+        {
+          $set: {
+            status: "paid" as InvoiceStatus,
+            paymentId: paymentId || undefined,
+            paidAt: paidAtDate,
+            updatedAt: now,
           },
-          { returnDocument: "after" }
-        )
-      }
+        }
+      )
 
-      if (!updatedDoc) {
-        updatedDoc = await collection.findOneAndUpdate(
-          { $or: orClauses },
-          {
-            $set: {
-              status: "paid" as InvoiceStatus,
-              paymentId: paymentId || undefined,
-              paidAt: paidAtDate,
-              updatedAt: now,
-            },
-          },
-          { returnDocument: "after" }
-        )
-      }
-
+      const updatedDoc = await collection.findOne({ $or: orClauses })
       if (!updatedDoc) return null
       return serializeInvoiceDocument(updatedDoc)
     } catch (error) {
