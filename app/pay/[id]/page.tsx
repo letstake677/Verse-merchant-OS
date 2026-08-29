@@ -100,6 +100,29 @@ export default function PublicPayPage() {
     setError(null)
 
     const cleanId = decodeURIComponent(id).trim()
+    const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
+
+    // Check localStorage cache for paid status
+    let cachedPaid: any = null
+    if (typeof window !== "undefined") {
+      try {
+        const keys = [
+          `verse_invoice_${cleanId}`,
+          `verse_invoice_${cleanNoPrefix}`,
+          `verse_invoice_INV-${cleanNoPrefix}`,
+        ]
+        for (const k of keys) {
+          const raw = localStorage.getItem(k)
+          if (raw) {
+            const p = JSON.parse(raw)
+            if (p && p.status === "paid") {
+              cachedPaid = p
+              break
+            }
+          }
+        }
+      } catch {}
+    }
 
     // 1. First, fetch real-time invoice status directly from backend API
     try {
@@ -107,9 +130,23 @@ export default function PublicPayPage() {
       if (res.ok) {
         const data = await res.json()
         if (data.invoice) {
-          setInvoice(data.invoice)
+          let finalInv = data.invoice
+          if (cachedPaid && cachedPaid.status === "paid" && finalInv.status !== "paid") {
+            try {
+              const syncRes = await fetch("/api/invoices/sync", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(cachedPaid),
+              })
+              if (syncRes.ok) {
+                const sData = await syncRes.json()
+                if (sData.invoice) finalInv = sData.invoice
+              }
+            } catch {}
+          }
+          setInvoice(finalInv)
           if (typeof window !== "undefined") {
-            localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(data.invoice))
+            localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(finalInv))
           }
           setIsLoading(false)
           return
@@ -129,12 +166,12 @@ export default function PublicPayPage() {
     if (dataParam) {
       const decoded = decodeInvoiceFromUrlParam(dataParam)
       if (decoded) {
-        // Sync decoded invoice with backend DB to retrieve authoritatively updated DB status
+        const toSync = cachedPaid && cachedPaid.status === "paid" ? cachedPaid : decoded
         try {
           const syncRes = await fetch("/api/invoices/sync", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(decoded),
+            body: JSON.stringify(toSync),
           })
           if (syncRes.ok) {
             const syncData = await syncRes.json()
@@ -149,14 +186,19 @@ export default function PublicPayPage() {
           }
         } catch {}
 
-        // Fallback to decoded static snapshot if sync failed
-        setInvoice(decoded)
+        setInvoice(toSync)
         if (typeof window !== "undefined") {
-          localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(decoded))
+          localStorage.setItem(`verse_invoice_${cleanId}`, JSON.stringify(toSync))
         }
         setIsLoading(false)
         return
       }
+    }
+
+    if (cachedPaid) {
+      setInvoice(cachedPaid)
+      setIsLoading(false)
+      return
     }
 
     // 3. Fallback to local storage cache

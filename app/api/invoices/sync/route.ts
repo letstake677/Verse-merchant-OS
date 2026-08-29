@@ -13,6 +13,10 @@ export async function POST(req: NextRequest) {
 
     const existing = await InvoiceRepository.findById(body.id || body.invoiceNumber)
     if (existing) {
+      if (body.status === "paid" && existing.status !== "paid") {
+        const updated = await InvoiceRepository.markInvoicePaid(existing.id, existing.merchantId, body.paymentId)
+        return NextResponse.json({ ok: true, invoice: updated || { ...existing, status: "paid" } })
+      }
       return NextResponse.json({ ok: true, invoice: existing })
     }
 

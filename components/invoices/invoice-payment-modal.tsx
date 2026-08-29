@@ -216,6 +216,7 @@ export function InvoicePaymentModal({
               transactionHash: hash,
               chainId: activeChainId,
               tokenSymbol: activeToken.symbol,
+              invoiceData: invoice,
             }),
           })
           const verifyData = await verifyRes.json()
@@ -236,13 +237,33 @@ export function InvoicePaymentModal({
         throw new Error(verifyErrorMsg)
       }
 
+      // Guarantee backend database invoice record is saved as paid
+      try {
+        await fetch("/api/invoices/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...invoice,
+            status: "paid",
+            paidAt: new Date().toISOString(),
+            paymentId: hash,
+          }),
+        })
+      } catch {}
+
       setPaymentSuccess(true)
       try {
         if (typeof window !== "undefined") {
-          const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString() }
+          const paidObj = { ...invoice, status: "paid" as const, paidAt: new Date().toISOString(), paymentId: hash }
+          const cleanNoPrefix = invoice.id.replace(/^inv-?/i, "")
           localStorage.setItem(`verse_invoice_${invoice.id}`, JSON.stringify(paidObj))
+          localStorage.setItem(`verse_invoice_${cleanNoPrefix}`, JSON.stringify(paidObj))
+          localStorage.setItem(`verse_invoice_INV-${cleanNoPrefix}`, JSON.stringify(paidObj))
           if (invoice.invoiceNumber) {
+            const numClean = invoice.invoiceNumber.replace(/^inv-?/i, "")
             localStorage.setItem(`verse_invoice_${invoice.invoiceNumber}`, JSON.stringify(paidObj))
+            localStorage.setItem(`verse_invoice_${numClean}`, JSON.stringify(paidObj))
+            localStorage.setItem(`verse_invoice_INV-${numClean}`, JSON.stringify(paidObj))
           }
         }
       } catch {}

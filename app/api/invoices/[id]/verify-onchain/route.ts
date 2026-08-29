@@ -51,10 +51,50 @@ export async function POST(
       )
     }
 
+    // Parse request body early
+    let txHash = ""
+    let chainId = POLYGON_MAINNET_CHAIN_ID
+    let tokenSymbol = "USDC"
+    let bodyData: any = null
+
+    try {
+      bodyData = await req.json()
+      if (bodyData && typeof bodyData.transactionHash === "string") {
+        txHash = bodyData.transactionHash.trim()
+      } else if (bodyData && typeof bodyData.txHash === "string") {
+        txHash = bodyData.txHash.trim()
+      }
+      if (bodyData && typeof bodyData.chainId === "number") {
+        chainId = bodyData.chainId
+      }
+      if (bodyData && typeof bodyData.tokenSymbol === "string") {
+        tokenSymbol = bodyData.tokenSymbol.trim().toUpperCase()
+      }
+    } catch {
+      // Body is optional
+    }
+
     const cleanId = decodeURIComponent(id).trim()
     let invoice = await InvoiceRepository.findById(cleanId)
     if (!invoice) {
       invoice = await InvoiceRepository.findByInvoiceNumber(cleanId)
+    }
+
+    // If invoice not found in DB, auto-create/sync if snapshot passed or cleanId provided
+    if (!invoice && bodyData?.invoiceData) {
+      try {
+        invoice = await InvoiceRepository.createInvoice({
+          ...bodyData.invoiceData,
+          id: cleanId,
+          invoiceNumber: bodyData.invoiceData.invoiceNumber || cleanId,
+          merchantId: bodyData.invoiceData.merchantId || "shared_merchant",
+          paymentAddress: bodyData.invoiceData.paymentAddress || "",
+          total: bodyData.invoiceData.total || "0",
+          items: bodyData.invoiceData.items || [],
+        })
+      } catch (err) {
+        console.warn("Auto-creating invoice in verify-onchain failed:", err)
+      }
     }
 
     if (!invoice) {
@@ -62,44 +102,6 @@ export async function POST(
         { ok: false, message: "Invoice not found." },
         { status: 404 }
       )
-    }
-
-    // If invoice is already paid, return success immediately
-    if (invoice.status === "paid") {
-      const activePayment = await PaymentRepository.findActivePaymentForInvoice(
-        invoice.id,
-        invoice.merchantId
-      )
-      return NextResponse.json({
-        ok: true,
-        isPaid: true,
-        status: "paid",
-        message: "Invoice is already marked as paid.",
-        invoice,
-        payment: activePayment,
-      })
-    }
-
-    // Parse request body
-    let txHash = ""
-    let chainId = POLYGON_MAINNET_CHAIN_ID
-    let tokenSymbol = "USDC"
-
-    try {
-      const body = await req.json()
-      if (body && typeof body.transactionHash === "string") {
-        txHash = body.transactionHash.trim()
-      } else if (body && typeof body.txHash === "string") {
-        txHash = body.txHash.trim()
-      }
-      if (body && typeof body.chainId === "number") {
-        chainId = body.chainId
-      }
-      if (body && typeof body.tokenSymbol === "string") {
-        tokenSymbol = body.tokenSymbol.trim().toUpperCase()
-      }
-    } catch {
-      // Body is optional
     }
 
     // Retrieve merchant settlement wallet address
@@ -213,11 +215,41 @@ export async function POST(
         )
       }
 
-      const updatedInvoice = await InvoiceRepository.markInvoicePaid(
+      let updatedInvoice = await InvoiceRepository.markInvoicePaid(
         invoice.id,
         invoice.merchantId,
         confirmedPayment?.id
       )
+      if (!updatedInvoice && invoice.invoiceNumber) {
+        updatedInvoice = await InvoiceRepository.markInvoicePaid(
+          invoice.invoiceNumber,
+          invoice.merchantId,
+          confirmedPayment?.id
+        )
+      }
+      if (!updatedInvoice) {
+        try {
+          const mongoDb = await getDb()
+          await mongoDb.collection("invoices").updateMany(
+            {
+              $or: [
+                { invoiceNumber: invoice.invoiceNumber },
+                { invoiceNumber: invoice.id },
+                { id: invoice.id },
+                { id: invoice.invoiceNumber },
+              ],
+            },
+            {
+              $set: {
+                status: "paid",
+                paidAt: new Date(),
+                updatedAt: new Date(),
+                paymentId: confirmedPayment?.id,
+              },
+            }
+          )
+        } catch {}
+      }
 
       AppLogger.auditPayment("onchain_confirmed", {
         invoiceId: invoice.id,

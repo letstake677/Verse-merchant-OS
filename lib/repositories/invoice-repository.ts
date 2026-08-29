@@ -40,25 +40,26 @@ export class InvoiceRepository {
 
     try {
       const cleanId = decodeURIComponent(invoiceId).trim()
+      const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
+      const invPrefixed = `INV-${cleanNoPrefix}`
       const collection = await this.getCollection()
-      let doc = null
 
+      const orClauses: any[] = [
+        { id: cleanId },
+        { id: cleanNoPrefix },
+        { id: invPrefixed },
+        { invoiceNumber: cleanId },
+        { invoiceNumber: cleanNoPrefix },
+        { invoiceNumber: invPrefixed },
+        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
+        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
+        { _id: cleanId as any },
+      ]
       if (ObjectId.isValid(cleanId)) {
-        doc = await collection.findOne({
-          _id: new ObjectId(cleanId),
-        })
+        orClauses.push({ _id: new ObjectId(cleanId) })
       }
 
-      if (!doc) {
-        doc = await collection.findOne({
-          $or: [
-            { _id: cleanId as any },
-            { invoiceNumber: cleanId },
-            { invoiceNumber: { $regex: new RegExp(`^${cleanId}$`, "i") } },
-            { invoiceNumber: `INV-${cleanId.replace(/^inv-?/i, "")}` },
-          ],
-        })
-      }
+      const doc = await collection.findOne({ $or: orClauses })
 
       if (!doc) return null
       return serializeInvoiceDocument(doc)
@@ -76,12 +77,20 @@ export class InvoiceRepository {
 
     try {
       const cleanNumber = decodeURIComponent(invoiceNumber).trim()
+      const cleanNoPrefix = cleanNumber.replace(/^inv-?/i, "")
+      const invPrefixed = `INV-${cleanNoPrefix}`
       const collection = await this.getCollection()
+
       const doc = await collection.findOne({
         $or: [
           { invoiceNumber: cleanNumber },
-          { invoiceNumber: { $regex: new RegExp(`^${cleanNumber}$`, "i") } },
-          { invoiceNumber: `INV-${cleanNumber.replace(/^inv-?/i, "")}` },
+          { invoiceNumber: cleanNoPrefix },
+          { invoiceNumber: invPrefixed },
+          { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNumber)}$`, "i") } },
+          { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
+          { id: cleanNumber },
+          { id: cleanNoPrefix },
+          { id: invPrefixed },
         ],
       })
 
@@ -663,15 +672,23 @@ export class InvoiceRepository {
       const collection = await this.getCollection()
       const now = new Date()
       const cleanId = decodeURIComponent(invoiceId).trim()
+      const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
+      const invPrefixed = `INV-${cleanNoPrefix}`
 
       const orClauses: any[] = [
+        { id: cleanId },
+        { id: cleanNoPrefix },
+        { id: invPrefixed },
         { invoiceNumber: cleanId },
+        { invoiceNumber: cleanNoPrefix },
+        { invoiceNumber: invPrefixed },
         { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanId)}$`, "i") } },
+        { invoiceNumber: { $regex: new RegExp(`^${escapeRegex(cleanNoPrefix)}$`, "i") } },
+        { _id: cleanId as any },
       ]
       if (ObjectId.isValid(cleanId)) {
         orClauses.push({ _id: new ObjectId(cleanId) })
       }
-      orClauses.push({ _id: cleanId })
 
       let updatedDoc = null
 
