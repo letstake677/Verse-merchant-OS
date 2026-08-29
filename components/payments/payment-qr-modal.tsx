@@ -3,7 +3,6 @@
 import * as React from "react"
 import { QRCodeSVG } from "qrcode.react"
 import { Invoice } from "@/lib/invoices/types"
-import { generatePayUrl } from "@/lib/invoices/invoice-link"
 import {
   SUPPORTED_PAYMENT_TOKENS,
   MERCHANT_RECEIVING_ADDRESS,
@@ -48,7 +47,7 @@ function safeParseBaseUnits(amountStr: string, decimals: number): string {
 
 export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = false }: PaymentQrModalProps) {
   const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
-  const [qrType, setQrType] = React.useState<"eip681" | "address" | "link">("eip681")
+  const [qrType, setQrType] = React.useState<"eip681" | "address">("eip681")
   const [copied, setCopied] = React.useState<boolean>(false)
   const [isDetectedPaid, setIsDetectedPaid] = React.useState<boolean>(invoice.status === "paid")
   const [manualTxHash, setManualTxHash] = React.useState<string>("")
@@ -171,14 +170,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
   }
 
   // Determine actual QR data depending on user preference
-  const checkoutUrl = generatePayUrl(invoice)
-
-  let activeQrValue = eip681Uri
-  if (qrType === "address") {
-    activeQrValue = recipient
-  } else if (qrType === "link") {
-    activeQrValue = checkoutUrl
-  }
+  const activeQrValue = qrType === "address" ? recipient : eip681Uri
 
   const handleCopyAddress = () => {
     navigator.clipboard.writeText(recipient)
@@ -307,17 +299,6 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
                 }`}
               >
                 Address Only
-              </button>
-              <button
-                type="button"
-                onClick={() => setQrType("link")}
-                className={`flex-1 py-1 px-2 rounded-md transition-all text-center cursor-pointer ${
-                  qrType === "link"
-                    ? "bg-white text-purple-950 font-semibold shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                Checkout Link
               </button>
             </div>
 
