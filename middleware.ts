@@ -5,7 +5,7 @@ export const SESSION_COOKIE_NAME = "verse_merchant_session"
 
 /**
  * Edge-compatible Next.js middleware for fast route guarding.
- * Checks for session token existence on protected dashboard and API paths.
+ * Checks for session token existence on protected dashboard paths.
  * Note: Authoritative cryptographic SIWE session verification occurs server-side in API handlers and components.
  */
 export function middleware(request: NextRequest) {
@@ -22,26 +22,11 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Guard protected API routes -> Return HTTP 401 JSON
-  if (pathname.startsWith("/api/invoices") || pathname === "/api/auth/me") {
-    if (!hasSession) {
-      return NextResponse.json(
-        {
-          ok: false,
-          message: "Authentication required.",
-        },
-        { status: 401 }
-      )
-    }
-  }
-
   return NextResponse.next()
 }
 
 export const config = {
   matcher: [
     "/dashboard/:path*",
-    "/api/invoices/:path*",
-    "/api/auth/me",
   ],
 }
