@@ -87,18 +87,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           invoiceNumber: invoice.invoiceNumber,
           merchantId: invoice.merchantId,
         })
-        paymentOrClauses.push({
-          reference: invoice.invoiceNumber,
-          merchantId: invoice.merchantId,
-        })
-        paymentOrClauses.push({
-          reference: `INV-${invoice.invoiceNumber.replace(/^INV-/i, "")}`,
-          merchantId: invoice.merchantId,
-        })
-        paymentOrClauses.push({
-          invoiceId: invoice.invoiceNumber,
-          merchantId: invoice.merchantId,
-        })
+        if (invoice.invoiceNumber) {
+          paymentOrClauses.push({
+            reference: invoice.invoiceNumber,
+            merchantId: invoice.merchantId,
+          })
+          paymentOrClauses.push({
+            reference: `INV-${invoice.invoiceNumber.replace(/^INV-/i, "")}`,
+            merchantId: invoice.merchantId,
+          })
+          paymentOrClauses.push({
+            invoiceId: invoice.invoiceNumber,
+            merchantId: invoice.merchantId,
+          })
+        }
       }
 
       const payments = await db
