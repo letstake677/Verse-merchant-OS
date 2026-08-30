@@ -140,7 +140,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       console.warn("Could not attach payments to invoice:", paymentQueryErr)
     }
 
-    return NextResponse.json({ ok: true, invoice })
+    return NextResponse.json(
+      { ok: true, invoice },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        },
+      }
+    )
   } catch (err) {
     console.error("GET /api/invoices/[id] error:", err)
     return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 })

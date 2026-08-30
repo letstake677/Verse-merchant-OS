@@ -189,16 +189,14 @@ export async function POST(
 
       let confirmedPayment
       if (existingPayment) {
-        confirmedPayment = await PaymentRepository.updatePaymentStatus(
-          existingPayment.id,
-          invoice.merchantId,
-          {
-            status: "confirmed",
-            transactionHash: txHash,
-            blockNumber,
-            payerAddress,
-          }
-        )
+        confirmedPayment = await PaymentRepository.updatePaymentStatus({
+          paymentId: existingPayment.id,
+          merchantId: invoice.merchantId,
+          status: "confirmed",
+          transactionHash: txHash,
+          blockNumber,
+          payerAddress,
+        })
       } else {
         const newPayment = await PaymentRepository.createPayment({
           merchantId: invoice.merchantId,
@@ -210,16 +208,14 @@ export async function POST(
           recipientAddress: merchantWalletAddress,
           reference: `INV-${invoice.invoiceNumber}`,
         })
-        confirmedPayment = await PaymentRepository.updatePaymentStatus(
-          newPayment.id,
-          invoice.merchantId,
-          {
-            status: "confirmed",
-            transactionHash: txHash,
-            blockNumber,
-            payerAddress,
-          }
-        )
+        confirmedPayment = await PaymentRepository.updatePaymentStatus({
+          paymentId: newPayment.id,
+          merchantId: invoice.merchantId,
+          status: "confirmed",
+          transactionHash: txHash,
+          blockNumber,
+          payerAddress,
+        })
       }
 
       let updatedInvoice = await InvoiceRepository.markInvoicePaid(
