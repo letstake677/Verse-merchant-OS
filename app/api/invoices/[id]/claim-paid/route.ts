@@ -56,13 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const db = await getDb()
       const collection = db.collection("invoices")
 
-      const filter: any = {}
-      if (ObjectId.isValid(cleanId)) {
-        filter.$or = [{ _id: new ObjectId(cleanId) }, { invoiceNumber: cleanId }]
-      } else {
-        filter.$or = [{ invoiceNumber: cleanId }, { _id: cleanId }]
-      }
-
+      const filter: any = { _id: new ObjectId(invoice.id) }
       await collection.updateOne(filter, {
         $set: {
           status: "payment_submitted",

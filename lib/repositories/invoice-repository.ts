@@ -168,9 +168,19 @@ export class InvoiceRepository {
       }
 
       if (!doc) {
+        const cleanNumber = decodeURIComponent(invoiceId).trim()
+        const cleanNoPrefix = cleanNumber.replace(/^inv-?/i, "")
+        const invPrefixed = `INV-${cleanNoPrefix}`
+
+        const orClauses: any[] = [
+          { invoiceNumber: cleanNumber },
+          { invoiceNumber: cleanNoPrefix },
+          { invoiceNumber: invPrefixed },
+        ]
+        
         doc = await collection.findOne({
-          invoiceNumber: invoiceId.trim(),
           merchantId,
+          $or: orClauses
         })
       }
 
@@ -438,9 +448,19 @@ export class InvoiceRepository {
 
     try {
       const collection = await this.getCollection()
+      const cleanNumber = decodeURIComponent(invoiceNumber).trim()
+      const cleanNoPrefix = cleanNumber.replace(/^inv-?/i, "")
+      const invPrefixed = `INV-${cleanNoPrefix}`
+
+      const orClauses: any[] = [
+        { invoiceNumber: cleanNumber },
+        { invoiceNumber: cleanNoPrefix },
+        { invoiceNumber: invPrefixed },
+      ]
+
       const doc = await collection.findOne({
         merchantId,
-        invoiceNumber: invoiceNumber.trim(),
+        $or: orClauses
       })
 
       if (!doc) return null
@@ -769,16 +789,23 @@ export class InvoiceRepository {
       const collection = await this.getCollection()
       const now = new Date()
       const cleanId = decodeURIComponent(invoiceId).trim()
+      const cleanNoPrefix = cleanId.replace(/^inv-?/i, "")
+      const invPrefixed = `INV-${cleanNoPrefix}`
 
-      const queryClauses: any[] = [{ id: cleanId }]
+      const queryClauses: any[] = [
+        { id: cleanId },
+        { invoiceNumber: cleanId },
+        { invoiceNumber: cleanNoPrefix },
+        { invoiceNumber: invPrefixed }
+      ]
+      
       if (ObjectId.isValid(cleanId)) {
         queryClauses.push({ _id: new ObjectId(cleanId) })
       }
-      if (merchantId) {
-        queryClauses.push({ invoiceNumber: cleanId, merchantId })
-      } else {
-        queryClauses.push({ invoiceNumber: cleanId })
-      }
+
+      // We explicitly DO NOT scope strictly by merchantId in the core query 
+      // because we want payment settlements to reliably mark ANY matching invoice as paid
+      // whether authenticated or not. We'll just rely on the ID matching uniquely.
 
       const updateFilter = { $or: queryClauses }
 
