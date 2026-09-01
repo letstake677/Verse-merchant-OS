@@ -358,7 +358,7 @@ export class PaymentRepository {
             {
               merchantId,
               invoiceId: { $in: finalizedInvoiceIds },
-              status: { $in: ["pending", "submitted", "confirming"] }
+              status: { $in: ["pending", "submitted", "confirming", "failed"] }
             },
             {
               $set: { status: "cancelled", updatedAt: new Date() }
@@ -474,7 +474,7 @@ export class PaymentRepository {
             {
               merchantId,
               invoiceId: { $in: finalizedInvoiceIds },
-              status: { $in: ["pending", "submitted", "confirming"] }
+              status: { $in: ["pending", "submitted", "confirming", "failed"] }
             },
             {
               $set: { status: "cancelled", updatedAt: new Date() }
@@ -546,7 +546,10 @@ export class PaymentRepository {
             if (invId) countedPendingInvoiceIds.add(invId)
           }
         } else if (p.status === "failed") {
-          failedCount += 1
+          const isInvoiceAlreadyPaid = linkedInvoice && (linkedInvoice.status === "paid" || linkedInvoice.status === "cancelled" || linkedInvoice.status === "void");
+          if (!isInvoiceAlreadyPaid) {
+            failedCount += 1
+          }
         } else if (p.status === "underpaid") {
           underpaidCount += 1
         }

@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
   experimental: {
     cpus: 1,
   },
+  serverExternalPackages: ["pino-pretty", "lokijs", "encoding"],
   webpack: (config) => {
     config.cache = false;
     config.devtool = false;
@@ -26,7 +27,6 @@ const nextConfig: NextConfig = {
       tls: false,
       "@react-native-async-storage/async-storage": false,
     };
-    config.externals = [...(config.externals || []), "pino-pretty", "lokijs", "encoding"];
     return config;
   },
 };
