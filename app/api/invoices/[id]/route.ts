@@ -16,7 +16,11 @@ async function enrichInvoicePaymentAddress(invoice: any) {
 
   // Fallback 1: If merchantId itself is an EVM address (e.g. 0x...)
   if (invoice.merchantId && isValidEvmAddress(invoice.merchantId)) {
-    return { ...invoice, paymentAddress: toChecksumAddress(invoice.merchantId) }
+    const updated = { ...invoice, paymentAddress: toChecksumAddress(invoice.merchantId) }
+    if (!updated.merchantBusinessName) {
+      updated.merchantBusinessName = "Verified Merchant"
+    }
+    return updated
   }
 
   // Fallback 2: Query merchant profile in database
@@ -30,9 +34,16 @@ async function enrichInvoicePaymentAddress(invoice: any) {
         queryOr.push({ _id: invoice.merchantId })
       }
       const merchantDoc = await db.collection("merchants").findOne({ $or: queryOr })
+      const updated = { ...invoice }
       if (merchantDoc?.walletAddress && isValidEvmAddress(merchantDoc.walletAddress)) {
-        return { ...invoice, paymentAddress: toChecksumAddress(merchantDoc.walletAddress) }
+        updated.paymentAddress = toChecksumAddress(merchantDoc.walletAddress)
       }
+      if (merchantDoc?.businessName) {
+        updated.merchantBusinessName = merchantDoc.businessName
+      } else if (merchantDoc?.name) {
+        updated.merchantBusinessName = merchantDoc.name
+      }
+      return updated
     } catch (e) {
       console.error("Failed to enrich invoice merchant wallet:", e)
     }

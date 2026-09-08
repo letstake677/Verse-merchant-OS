@@ -103,6 +103,7 @@ export function InvoicePaymentModal({
   const { writeContractAsync } = useWriteContract()
 
   const [isVerifying, setIsVerifying] = React.useState(false)
+  const [isReviewingPayment, setIsReviewingPayment] = React.useState(false)
 
   // Reset state when opened
   React.useEffect(() => {
@@ -112,6 +113,7 @@ export function InvoicePaymentModal({
       setErrorMessage(null)
       setIsProcessing(false)
       setIsVerifying(false)
+      setIsReviewingPayment(false)
     }
   }, [isOpen])
 
@@ -124,6 +126,12 @@ export function InvoicePaymentModal({
     ""
   const targetRecipient = toChecksumAddress(rawRecipient)
   const isRecipientValid = Boolean(targetRecipient && targetRecipient !== "0x0000000000000000000000000000000000000000")
+
+  const merchantDisplayName =
+    invoice.merchantBusinessName ||
+    invoice.businessName ||
+    invoice.merchantName ||
+    "Verse Verified Merchant"
 
   const isSelfPayment = Boolean(
     isWalletConnected &&
@@ -140,6 +148,19 @@ export function InvoicePaymentModal({
     }
     if (!isRecipientValid || !targetRecipient) {
       setErrorMessage("Merchant settlement address is missing. Cannot execute payment.")
+      return
+    }
+
+    // Strict Anti-Scam & Client Protection checks
+    const checksumAuthoritative = toChecksumAddress(invoice.paymentAddress || targetRecipient)
+    const checksumTarget = toChecksumAddress(targetRecipient)
+    if (!checksumTarget || !checksumAuthoritative || checksumTarget.toLowerCase() !== checksumAuthoritative.toLowerCase()) {
+      setErrorMessage("Payment blocked: The verified merchant recipient does not match the transaction recipient.")
+      return
+    }
+
+    if (activeChainId !== POLYGON_MAINNET_CHAIN_ID) {
+      setErrorMessage("Payment blocked: Invalid settlement network. Verse Merchant OS only processes payments on Polygon Mainnet (Chain ID 137).")
       return
     }
 
@@ -362,6 +383,99 @@ export function InvoicePaymentModal({
                   className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-medium text-sm transition-colors"
                 >
                   Done
+                </button>
+              </div>
+            </div>
+          ) : isReviewingPayment ? (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Verified Payment Request</span>
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  Only pay through this verified payment request. Funds will be transferred non-custodially to the verified merchant settlement wallet on Polygon.
+                </p>
+              </div>
+
+              {/* Review Card */}
+              <div className="bg-slate-50 rounded-2xl border border-slate-200 divide-y divide-slate-200/80 text-xs">
+                <div className="p-3.5 flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Merchant</span>
+                  <span className="font-bold text-slate-900 truncate max-w-[200px]">{merchantDisplayName}</span>
+                </div>
+                <div className="p-3.5 flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Invoice Number</span>
+                  <span className="font-mono font-bold text-slate-900">#{invoice.invoiceNumber}</span>
+                </div>
+                <div className="p-3.5 flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Amount to Pay</span>
+                  <div className="text-right">
+                    <div className="font-mono font-bold text-purple-700 text-sm">
+                      {tokenCalc.tokenAmount} {activeToken.symbol}
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      ≈ ${invoice.total} {invoice.currency || "USD"}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-3.5 flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Network</span>
+                  <span className="font-semibold text-slate-900 bg-purple-100 text-purple-800 px-2 py-0.5 rounded">
+                    Polygon Mainnet (137)
+                  </span>
+                </div>
+                <div className="p-3.5 flex items-start justify-between gap-2">
+                  <span className="text-slate-500 font-medium shrink-0">Recipient</span>
+                  <span className="font-mono text-[11px] text-slate-800 break-all text-right font-semibold">
+                    {targetRecipient}
+                  </span>
+                </div>
+                <div className="p-3.5 flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Payer Wallet</span>
+                  <span className="font-mono text-slate-800">
+                    {address?.slice(0, 6)}...{address?.slice(-4)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Error Box */}
+              {errorMessage && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs text-rose-700">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-1">
+                    <div className="font-medium">{errorMessage}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons for Review */}
+              <div className="pt-2 flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsReviewingPayment(false)}
+                  disabled={isProcessing}
+                  className="px-4 py-3 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePay}
+                  disabled={isProcessing}
+                  className="flex-1 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Confirming in Wallet...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Confirm &amp; Pay {tokenCalc.tokenAmount} {activeToken.symbol}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -590,15 +704,11 @@ export function InvoicePaymentModal({
                   </button>
                 ) : (
                   <button
-                    onClick={handlePay}
-                    disabled={!isRecipientValid || isProcessing || tokenCalc.isCalculating || tokenCalc.rate <= 0}
+                    onClick={() => setIsReviewingPayment(true)}
+                    disabled={!isRecipientValid || tokenCalc.isCalculating || tokenCalc.rate <= 0}
                     className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                   >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" /> Confirming on Polygon...
-                      </>
-                    ) : tokenCalc.isCalculating || tokenCalc.rate <= 0 ? (
+                    {tokenCalc.isCalculating || tokenCalc.rate <= 0 ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" /> Fetching live market rate...
                       </>
@@ -606,7 +716,7 @@ export function InvoicePaymentModal({
                       <span>Merchant Address Missing</span>
                     ) : (
                       <>
-                        <span>Pay {tokenCalc.tokenAmount} {activeToken.symbol}</span>
+                        <span>Review &amp; Pay {tokenCalc.tokenAmount} {activeToken.symbol}</span>
                         <ArrowRight className="w-4 h-4" />
                       </>
                     )}

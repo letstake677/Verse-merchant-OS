@@ -8,6 +8,7 @@ import { Invoice, InvoiceItem } from "@/lib/invoices/types"
 import { decodeInvoiceFromUrlParam, generatePayUrl } from "@/lib/invoices/invoice-link"
 import { InvoicePaymentModal } from "@/components/invoices/invoice-payment-modal"
 import { PaymentQrModal } from "@/components/payments/payment-qr-modal"
+import { SmartQRCard } from "@/components/payments/smart-qr-card"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import { useAppKit } from "@reown/appkit/react"
 import { useAccount, useDisconnect } from "wagmi"
@@ -313,6 +314,14 @@ export default function PublicPayPage() {
 
   const isPaid = invoice.status === "paid"
   const isSubmitted = invoice.status === "payment_submitted"
+  const isCancelled = invoice.status === "cancelled"
+  const isDraft = invoice.status === "draft"
+  const merchantDisplayName =
+    invoice.merchantBusinessName ||
+    invoice.businessName ||
+    invoice.merchantName ||
+    "Verse Verified Merchant"
+
   const numericTotal = parseFloat(invoice.total || "0")
   const polCalc = calculateAmount(numericTotal, invoice.currency || "USD", "POL")
   const verseCalc = calculateAmount(numericTotal, invoice.currency || "USD", "VERSE")
@@ -452,11 +461,28 @@ export default function PublicPayPage() {
             </div>
           </div>
 
+          {/* Verified Status Checks */}
+          <div className="bg-slate-900/95 text-white px-6 py-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 font-bold text-emerald-400">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Verified Merchant Payment Request</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-300 text-[11px]">
+              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Invoice verified</span>
+              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Merchant verified</span>
+              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Amount verified</span>
+              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Network verified (Polygon 137)</span>
+              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Recipient verified</span>
+            </div>
+          </div>
+
           {/* Receiving Merchant Info Pill */}
           <div className="px-6 py-3 bg-purple-50/60 border-b border-purple-100 flex flex-wrap items-center justify-between gap-3 text-xs">
             <div className="flex items-center gap-2 text-slate-700 font-medium">
               <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-              <span>Merchant Receiving Wallet:</span>
+              <span className="font-semibold text-slate-900">{merchantDisplayName}</span>
+              <span className="text-slate-400">•</span>
+              <span>Settlement Wallet:</span>
               {targetRecipient ? (
                 <span className="font-mono font-bold text-purple-950 bg-white px-2 py-0.5 rounded border border-purple-200">
                   {targetRecipient.slice(0, 8)}...{targetRecipient.slice(-6)}
@@ -482,8 +508,32 @@ export default function PublicPayPage() {
             )}
           </div>
 
-          {/* Paid Banner or Payment Methods */}
-          {isPaid ? (
+          {/* Status Banners or Payment Methods */}
+          {isCancelled ? (
+            <div className="p-6 md:p-8 space-y-4 text-center bg-rose-50/40 border-b border-rose-100">
+              <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                <AlertCircle className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="text-xl font-bold text-slate-900">Invoice Cancelled</h3>
+                <p className="text-sm text-slate-600">
+                  This payment request has been cancelled by the merchant. Payments cannot be submitted for cancelled invoices.
+                </p>
+              </div>
+            </div>
+          ) : isDraft ? (
+            <div className="p-6 md:p-8 space-y-4 text-center bg-amber-50/40 border-b border-amber-100">
+              <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto">
+                <Clock className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="text-xl font-bold text-slate-900">Draft Invoice</h3>
+                <p className="text-sm text-slate-600">
+                  This invoice is currently in draft status and has not been finalized for payment by the merchant.
+                </p>
+              </div>
+            </div>
+          ) : isPaid ? (
             <div className="p-6 md:p-8 space-y-6 text-center bg-emerald-50/30">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs animate-in zoom-in-95 duration-200">
                 <CheckCircle2 className="w-9 h-9" />
@@ -791,123 +841,71 @@ export default function PublicPayPage() {
                 </div>
               )}
 
-              {/* Tab 2: Mobile QR Code Scanning */}
+              {/* Tab 2: Mobile Smart QR Code Scanning */}
               {activeTab === "qr" && (
-                <div className="p-6 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="p-4 sm:p-6 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900">Select Currency for Mobile QR</h3>
+                      <h3 className="text-sm font-bold text-slate-900">Server-Authoritative Smart QR</h3>
                       <p className="text-xs text-slate-500">
-                        Scan with MetaMask Mobile, Coinbase Wallet, Trust Wallet, or camera
+                        Point your mobile camera or Web3 wallet scanner to resolve and pay this verified request.
                       </p>
                     </div>
-
-                    <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
-                      {availableTokens.map((t) => (
-                        <button
-                          key={t.symbol}
-                          onClick={() => setSelectedTokenSymbol(t.symbol)}
-                          className={`px-3 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                            selectedTokenSymbol === t.symbol
-                              ? "bg-purple-600 text-white shadow-xs"
-                              : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                          }`}
-                        >
-                          {t.symbol}
-                        </button>
-                      ))}
-                    </div>
+                    <span className="text-[11px] font-mono text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100 flex items-center gap-1.5 w-fit">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Verified Polygon Smart QR
+                    </span>
                   </div>
 
-                  <div className="flex flex-col md:flex-row items-center gap-8 justify-center py-2">
-                    {/* QR Code Container */}
-                    <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center space-y-3">
-                      <div className="p-2 bg-white rounded-xl">
-                        <QRCodeSVG
-                          value={eip681Uri}
-                          size={200}
-                          level="M"
-                          includeMargin={false}
-                          className="rounded-lg"
-                        />
-                      </div>
-                      <span className="text-[11px] font-mono text-purple-800 font-bold bg-purple-50 px-2.5 py-1 rounded-md">
-                        {activeTokenCalc.tokenAmount} {activeQrToken.symbol}
-                      </span>
-                    </div>
+                  <div className="flex justify-center">
+                    <SmartQRCard
+                      invoice={invoice}
+                      targetRecipient={targetRecipient}
+                      merchantName={merchantDisplayName}
+                      initialTokenSymbol={selectedTokenSymbol}
+                      showControls={true}
+                      showTokenSwitcher={true}
+                    />
+                  </div>
 
-                    {/* QR Instructions & Manual Copy */}
-                    <div className="space-y-4 max-w-sm text-left">
-                      <div className="space-y-1">
-                        <h4 className="font-bold text-sm text-slate-900">How to pay via mobile QR:</h4>
-                        <ol className="list-decimal list-inside text-xs text-slate-600 space-y-1">
-                          <li>Open your mobile Web3 wallet app (MetaMask, Trust, etc.).</li>
-                          <li>Tap the <strong>Scan QR</strong> icon in your wallet.</li>
-                          <li>Point at this QR code — amount & address auto-fill!</li>
-                          <li>Approve the transaction on Polygon network.</li>
-                        </ol>
-                      </div>
+                  {/* I Have Paid CTA for QR scan users */}
+                  <div className="max-w-md mx-auto pt-2 border-t border-slate-200/80 space-y-3">
+                    <button
+                      type="button"
+                      onClick={handleClaimPaid}
+                      disabled={isClaimingPaid}
+                      className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99]"
+                    >
+                      {isClaimingPaid ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4" />
+                      )}
+                      <span>I Have Paid (Notify Merchant)</span>
+                    </button>
+                    <p className="text-[11px] text-slate-500 text-center leading-normal">
+                      QR scan karke payment submit ho gayi? &ldquo;I Have Paid&rdquo; click karein taake merchant ko confirmation notification mil jaye.
+                    </p>
 
-                      <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between text-slate-500 font-medium">
-                          <span>Merchant Address:</span>
-                          <button
-                            onClick={() => copyToClipboard(targetRecipient, "qr_address")}
-                            className="text-purple-600 hover:text-purple-800 flex items-center gap-1 font-semibold cursor-pointer"
-                          >
-                            {copiedField === "qr_address" ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                            <span>{copiedField === "qr_address" ? "Copied" : "Copy"}</span>
-                          </button>
-                        </div>
-                        <div className="font-mono text-slate-800 break-all text-[11px]">
-                          {targetRecipient}
-                        </div>
-                      </div>
-
-                      {/* I Have Paid CTA for QR scan users */}
-                      <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                    {/* Mobile Wallet Direct Buttons */}
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={handleClaimPaid}
-                          disabled={isClaimingPaid}
-                          className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99]"
+                          onClick={handleOpenMetaMask}
+                          className="py-2 px-2.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         >
-                          {isClaimingPaid ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4" />
-                          )}
-                          <span>I Have Paid (Notify Merchant)</span>
+                          <Smartphone className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Open in MetaMask</span>
                         </button>
-                        <p className="text-[11px] text-slate-500 text-center leading-normal">
-                          QR scan karke payment submit ho gayi? &ldquo;I Have Paid&rdquo; click karein taake merchant ko confirmation notification mil jaye.
-                        </p>
-                      </div>
-
-                      {/* Mobile Wallet Direct Buttons */}
-                      <div className="pt-2 border-t border-slate-200 space-y-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={handleOpenMetaMask}
-                            className="py-2 px-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                          >
-                            <Smartphone className="w-3.5 h-3.5" />
-                            <span>Open in MetaMask</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleOpenTrustWallet}
-                            className="py-2 px-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                          >
-                            <Smartphone className="w-3.5 h-3.5 text-purple-400" />
-                            <span>Open in Trust Wallet</span>
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={handleOpenTrustWallet}
+                          className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <Smartphone className="w-3.5 h-3.5 text-slate-600" />
+                          <span>Open in Trust Wallet</span>
+                        </button>
                       </div>
                     </div>
                   </div>

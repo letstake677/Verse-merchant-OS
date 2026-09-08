@@ -147,6 +147,9 @@ export interface Invoice {
   paymentAddress?: string
   paymentNetwork?: string
   chainId?: number
+  merchantBusinessName?: string
+  merchantName?: string
+  businessName?: string
   createdAt: string
   updatedAt?: string
   paidAt?: string

@@ -56,6 +56,10 @@ export interface Invoice {
   paymentAddress: string
   paymentNetwork: string
   chainId: number
+  merchantId?: string
+  merchantBusinessName?: string
+  merchantName?: string
+  businessName?: string
   payments?: InvoicePayment[]
   paymentClaim?: InvoicePaymentClaim
   paidAt?: string
