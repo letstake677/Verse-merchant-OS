@@ -100,8 +100,31 @@ export function SmartQRCard({
 
   const isPaid = invoice.status === "paid"
   const isCancelled = invoice.status === "cancelled"
-  const isDraft = invoice.status === "draft"
-  const isOpen = !isPaid && !isCancelled && !isDraft
+  const isDraft = false // Always keep QR active and scannable
+  const isOpen = !isPaid && !isCancelled
+
+  // Construct authoritative EIP-681 standard transaction URI for mobile Web3 wallets
+  const eip681Uri = React.useMemo(() => {
+    if (!targetRecipient) return canonicalCheckoutUrl
+    try {
+      const decimals = activeToken.decimals || 18
+      const amountStr = String(activeTokenCalc.tokenAmount || "0").replace(/,/g, "").trim()
+      const num = parseFloat(amountStr)
+      if (isNaN(num) || num <= 0) return canonicalCheckoutUrl
+      const [whole = "0", frac = ""] = amountStr.split(".")
+      const paddedFrac = frac.slice(0, decimals).padEnd(decimals, "0")
+      const wholeBig = BigInt(whole) * BigInt(10 ** decimals)
+      const fracBig = BigInt(paddedFrac)
+      const baseUnits = (wholeBig + fracBig).toString()
+
+      if (activeToken.isNative || activeToken.address.toLowerCase() === "0x0000000000000000000000000000000000001010") {
+        return `ethereum:${targetRecipient}@137?value=${baseUnits}`
+      }
+      return `ethereum:${activeToken.address}@137/transfer?address=${targetRecipient}&uint256=${baseUnits}`
+    } catch {
+      return canonicalCheckoutUrl
+    }
+  }, [targetRecipient, activeToken, activeTokenCalc.tokenAmount, canonicalCheckoutUrl])
 
   // Copy payment link with visual feedback
   const handleCopyLink = async () => {
@@ -209,11 +232,11 @@ export function SmartQRCard({
         <div className="relative p-4 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center">
           <QRCodeSVG
             id={`smart-qr-svg-${invoice.id || invoice.invoiceNumber}`}
-            value={canonicalCheckoutUrl}
+            value={eip681Uri}
             size={188}
             level="M"
             includeMargin={false}
-            className={`rounded-lg transition-opacity ${!isOpen ? "opacity-30 blur-[1px]" : "opacity-100"}`}
+            className="rounded-lg"
           />
 
           {/* Paid Overlay */}
@@ -243,39 +266,20 @@ export function SmartQRCard({
               <p className="text-[10px] text-slate-300 mt-1">Payment disabled</p>
             </div>
           )}
-
-          {/* Draft Overlay */}
-          {isDraft && (
-            <div className="absolute inset-0 m-2 bg-slate-900/90 backdrop-blur-[2px] rounded-xl flex flex-col items-center justify-center p-3 text-center text-white">
-              <div className="w-10 h-10 rounded-full bg-amber-500/20 border border-amber-400/40 flex items-center justify-center mb-1.5">
-                <Clock className="w-6 h-6 text-amber-400" />
-              </div>
-              <span className="font-bold text-xs uppercase tracking-wider text-amber-300">
-                DRAFT INVOICE
-              </span>
-              <p className="text-[10px] text-slate-300 mt-1">Not yet issued</p>
-            </div>
-          )}
         </div>
 
         {/* Scan to Pay instruction */}
         <div className="mt-3 text-center space-y-1">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            {isOpen ? "SCAN TO PAY" : isPaid ? "INVOICE SETTLED" : "PAYMENT UNAVAILABLE"}
+            {isPaid ? "INVOICE SETTLED" : isCancelled ? "INVOICE CANCELLED" : "SCAN TO PAY"}
           </span>
           <p className="text-[11px] text-slate-500">
-            {isOpen
-              ? "Scan with phone camera or mobile Web3 wallet"
-              : isPaid
+            {isPaid
               ? "This invoice has already been settled on-chain"
-              : "Payment cannot be processed for this state"}
+              : isCancelled
+              ? "Payment cannot be processed for this state"
+              : "Scan with mobile Web3 wallet to sign transaction"}
           </p>
-        </div>
-
-        {/* Verified Payment Request Badge */}
-        <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold shadow-2xs">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span>Verified Payment Request</span>
         </div>
 
         {/* Currency & Token Amount */}

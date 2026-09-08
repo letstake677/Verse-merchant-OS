@@ -868,45 +868,29 @@ export default function PublicPayPage() {
                     />
                   </div>
 
-                  {/* I Have Paid CTA for QR scan users */}
-                  <div className="max-w-md mx-auto pt-2 border-t border-slate-200/80 space-y-3">
-                    <button
-                      type="button"
-                      onClick={handleClaimPaid}
-                      disabled={isClaimingPaid}
-                      className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99]"
-                    >
-                      {isClaimingPaid ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4" />
-                      )}
-                      <span>I Have Paid (Notify Merchant)</span>
-                    </button>
-                    <p className="text-[11px] text-slate-500 text-center leading-normal">
-                      QR scan karke payment submit ho gayi? &ldquo;I Have Paid&rdquo; click karein taake merchant ko confirmation notification mil jaye.
-                    </p>
-
-                    {/* Mobile Wallet Direct Buttons */}
-                    <div className="pt-2 border-t border-slate-200 space-y-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={handleOpenMetaMask}
-                          className="py-2 px-2.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Smartphone className="w-3.5 h-3.5 text-purple-600" />
-                          <span>Open in MetaMask</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleOpenTrustWallet}
-                          className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <Smartphone className="w-3.5 h-3.5 text-slate-600" />
-                          <span>Open in Trust Wallet</span>
-                        </button>
-                      </div>
+                  {/* Mobile Direct In-App Browser Options */}
+                  <div className="max-w-md mx-auto pt-2 border-t border-slate-200/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span className="font-semibold text-slate-700">Mobile Wallet 1-Tap Checkout:</span>
+                      <span>Polygon PoS</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleOpenMetaMask}
+                        className="py-2.5 px-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Open in MetaMask</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenTrustWallet}
+                        className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Smartphone className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Open in Trust Wallet</span>
+                      </button>
                     </div>
                   </div>
                 </div>
