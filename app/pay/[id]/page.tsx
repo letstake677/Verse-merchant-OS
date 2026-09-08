@@ -521,18 +521,6 @@ export default function PublicPayPage() {
                 </p>
               </div>
             </div>
-          ) : isDraft ? (
-            <div className="p-6 md:p-8 space-y-4 text-center bg-amber-50/40 border-b border-amber-100">
-              <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto">
-                <Clock className="w-8 h-8" />
-              </div>
-              <div className="space-y-1.5 max-w-md mx-auto">
-                <h3 className="text-xl font-bold text-slate-900">Draft Invoice</h3>
-                <p className="text-sm text-slate-600">
-                  This invoice is currently in draft status and has not been finalized for payment by the merchant.
-                </p>
-              </div>
-            </div>
           ) : isPaid ? (
             <div className="p-6 md:p-8 space-y-6 text-center bg-emerald-50/30">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs animate-in zoom-in-95 duration-200">
