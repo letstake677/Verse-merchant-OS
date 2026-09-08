@@ -216,7 +216,7 @@ export function SmartQRCard({
       <div className="px-5 pt-4 pb-3 bg-slate-900 text-white text-center border-b border-slate-800">
         <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-purple-300">
           <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-          <span>VERSE MERCHANT OS</span>
+          <span>SMART APPROVAL QR</span>
         </div>
         <h3 className="text-base font-bold text-white mt-1 truncate">
           {verifiedMerchantName}
@@ -232,7 +232,7 @@ export function SmartQRCard({
         <div className="relative p-4 bg-white rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center">
           <QRCodeSVG
             id={`smart-qr-svg-${invoice.id || invoice.invoiceNumber}`}
-            value={eip681Uri}
+            value={canonicalCheckoutUrl}
             size={188}
             level="M"
             includeMargin={false}
@@ -271,14 +271,14 @@ export function SmartQRCard({
         {/* Scan to Pay instruction */}
         <div className="mt-3 text-center space-y-1">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            {isPaid ? "INVOICE SETTLED" : isCancelled ? "INVOICE CANCELLED" : "SCAN TO PAY"}
+            {isPaid ? "REQUEST COMPLETED" : isCancelled ? "REQUEST CANCELLED" : "SCAN TO REVIEW & APPROVE"}
           </span>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[11px] text-slate-500 max-w-[260px] mx-auto">
             {isPaid
-              ? "This invoice has already been settled on-chain"
+              ? "This request has already been completed on Polygon"
               : isCancelled
               ? "Payment cannot be processed for this state"
-              : "Scan with mobile Web3 wallet to sign transaction"}
+              : "Scan with any phone camera or wallet to review details and approve payment. No money is deducted upon scanning."}
           </p>
         </div>
 

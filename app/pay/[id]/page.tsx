@@ -1,17 +1,15 @@
 "use client"
 
-
-
 import * as React from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { Invoice, InvoiceItem } from "@/lib/invoices/types"
 import { decodeInvoiceFromUrlParam, generatePayUrl } from "@/lib/invoices/invoice-link"
-import { InvoicePaymentModal } from "@/components/invoices/invoice-payment-modal"
 import { PaymentQrModal } from "@/components/payments/payment-qr-modal"
 import { SmartQRCard } from "@/components/payments/smart-qr-card"
 import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import { useAppKit } from "@reown/appkit/react"
-import { useAccount, useDisconnect } from "wagmi"
+import { useAccount, useDisconnect, useSendTransaction, useWriteContract, useSwitchChain, useBalance } from "wagmi"
+import { parseUnits, formatUnits, erc20Abi } from "viem"
 import { formatWalletAddress } from "@/lib/utils/wallet"
 import { QRCodeSVG } from "qrcode.react"
 import {
@@ -22,7 +20,6 @@ import {
 } from "@/lib/payments/config"
 import { VerseLogo } from "@/components/ui/verse-logo"
 import {
-  Zap,
   CreditCard,
   QrCode,
   CheckCircle2,
@@ -30,7 +27,6 @@ import {
   ExternalLink,
   ShieldCheck,
   Building,
-  Calendar,
   AlertCircle,
   Loader2,
   RefreshCw,
@@ -39,12 +35,22 @@ import {
   Check,
   Printer,
   ArrowRight,
-  Sparkles,
-  HelpCircle,
-  Plus,
   Smartphone,
   LogOut,
+  XCircle,
+  ShieldAlert,
 } from "lucide-react"
+
+type ApprovalState =
+  | "SCANNED"
+  | "PENDING_APPROVAL"
+  | "APPROVED"
+  | "EXECUTING"
+  | "CONFIRMING"
+  | "COMPLETED"
+  | "REJECTED"
+  | "FAILED"
+  | "EXPIRED"
 
 function safeParseBaseUnits(amountStr: string, decimals: number): string {
   try {
@@ -72,29 +78,37 @@ export default function PublicPayPage() {
   React.useEffect(() => {
     setMounted(true)
   }, [])
-  const { address, isConnected, status, isConnecting, isReconnecting } = useAccount()
+
+  const { address, isConnected, status, chainId, isConnecting, isReconnecting } = useAccount()
   const { disconnect } = useDisconnect()
+  const { switchChain } = useSwitchChain()
+  const { sendTransactionAsync } = useSendTransaction()
+  const { writeContractAsync } = useWriteContract()
 
   const isWalletConnected = Boolean(mounted && address && (isConnected || status === "connected"))
   const isWalletConnecting = Boolean(mounted && (isConnecting || isReconnecting || status === "connecting" || status === "reconnecting"))
+  const isWrongChain = Boolean(isWalletConnected && chainId && chainId !== POLYGON_MAINNET_CHAIN_ID)
 
   const [invoice, setInvoice] = React.useState<Invoice | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
-  // Interactive Quick Pay Fallback state if invoice not found
-  const [customAmount, setCustomAmount] = React.useState<string>("50.00")
-  const [customMerchantAddress, setCustomMerchantAddress] = React.useState<string>(MERCHANT_RECEIVING_ADDRESS)
-  const [customDescription, setCustomDescription] = React.useState<string>("Direct Payment Settlement")
+  // Direct Approval State Machine
+  const [approvalState, setApprovalState] = React.useState<ApprovalState>("PENDING_APPROVAL")
+  const [executionTxHash, setExecutionTxHash] = React.useState<string | null>(null)
+  const [approvalErrorMessage, setApprovalErrorMessage] = React.useState<string | null>(null)
 
-  // Payment Mode / Modals
-  const [activeTab, setActiveTab] = React.useState<"wallet" | "qr">("wallet")
+  // Payment Token Selection
   const [selectedTokenSymbol, setSelectedTokenSymbol] = React.useState<string>("USDC")
-  const [isPayOpen, setIsPayOpen] = React.useState(false)
   const [isQrModalOpen, setIsQrModalOpen] = React.useState(false)
   const [copiedField, setCopiedField] = React.useState<string | null>(null)
 
-  const { calculateAmount, refreshPrices, secondsRemaining, isLoading: pricesLoading } = useCryptoPrices()
+  const { calculateAmount, refreshPrices, secondsRemaining, setPaused, isLoading: pricesLoading } = useCryptoPrices()
+
+  // Pause price oscillation during active approval execution
+  React.useEffect(() => {
+    setPaused(approvalState === "EXECUTING" || approvalState === "CONFIRMING")
+  }, [approvalState, setPaused])
 
   const fetchInvoice = React.useCallback(async (silent = false) => {
     if (!id) return
@@ -126,6 +140,9 @@ export default function PublicPayPage() {
             }
             return data.invoice
           })
+          if (data.invoice.status === "paid") {
+            setApprovalState("COMPLETED")
+          }
           setIsLoading(false)
           return
         }
@@ -165,6 +182,9 @@ export default function PublicPayPage() {
                 }
                 return syncData.invoice
               })
+              if (syncData.invoice.status === "paid") {
+                setApprovalState("COMPLETED")
+              }
               setIsLoading(false)
               return
             }
@@ -177,6 +197,9 @@ export default function PublicPayPage() {
           }
           return decoded
         })
+        if (decoded.status === "paid") {
+          setApprovalState("COMPLETED")
+        }
         setIsLoading(false)
         return
       }
@@ -241,29 +264,211 @@ export default function PublicPayPage() {
     }
   }
 
-  const [isClaimingPaid, setIsClaimingPaid] = React.useState(false)
-
-  const handleClaimPaid = async () => {
-    if (!invoice) return
-    setIsClaimingPaid(true)
-    try {
-      const res = await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/claim-paid`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tokenSymbol: selectedTokenSymbol,
-          tokenAmount: activeTokenCalc.tokenAmount,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.ok) {
-        setInvoice((prev) => (prev ? { ...prev, status: "payment_submitted" } : null))
-      }
-    } catch (err) {
-      console.error("Claim paid error:", err)
-    } finally {
-      setIsClaimingPaid(false)
+  const numericTotal = parseFloat(invoice?.total || "0")
+  const availableTokens = SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []
+  const activeToken =
+    availableTokens.find((t) => t.symbol.toUpperCase() === selectedTokenSymbol.toUpperCase()) ||
+    availableTokens[0] || {
+      symbol: "USDC",
+      name: "USD Coin",
+      address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" as `0x${string}`,
+      decimals: 6,
+      chainId: 137,
+      color: "blue",
     }
+
+  const activeTokenCalc = calculateAmount(
+    numericTotal,
+    invoice?.currency || "USD",
+    activeToken.symbol
+  )
+
+  const rawRecipient =
+    invoice?.paymentAddress ||
+    (invoice as any)?.merchantWalletAddress ||
+    (invoice?.merchantId?.startsWith("0x") ? invoice.merchantId : "") ||
+    ""
+  const targetRecipient = toChecksumAddress(rawRecipient)
+  const isRecipientValid = Boolean(targetRecipient && targetRecipient !== "0x0000000000000000000000000000000000000000")
+
+  const merchantDisplayName =
+    invoice?.merchantBusinessName ||
+    invoice?.businessName ||
+    invoice?.merchantName ||
+    "Verse Verified Merchant"
+
+  const publicCheckoutUrl = invoice ? generatePayUrl(invoice) : ""
+
+  // Direct Approve & Pay Execution Handler
+  const handleApproveAndPay = async () => {
+    if (!invoice) return
+
+    // 1. One-time payment protection
+    if (invoice.status === "paid" || approvalState === "COMPLETED") {
+      setApprovalErrorMessage("This payment request has already been completed and settled.")
+      return
+    }
+
+    // 2. Prevent double submission
+    if (approvalState === "EXECUTING" || approvalState === "CONFIRMING") {
+      return
+    }
+
+    // 3. Ensure wallet is connected
+    if (!isWalletConnected || !address) {
+      setApprovalErrorMessage(null)
+      open()
+      return
+    }
+
+    // 4. Validate recipient
+    if (!isRecipientValid || !targetRecipient) {
+      setApprovalErrorMessage("Merchant settlement recipient address is missing or invalid.")
+      return
+    }
+
+    // 5. Network validation
+    if (chainId !== POLYGON_MAINNET_CHAIN_ID) {
+      if (switchChain) {
+        try {
+          await switchChain({ chainId: POLYGON_MAINNET_CHAIN_ID })
+        } catch {
+          setApprovalErrorMessage("Please switch your wallet network to Polygon Mainnet (Chain ID 137) to approve.")
+          return
+        }
+      } else {
+        setApprovalErrorMessage("Please switch your wallet network to Polygon Mainnet (Chain ID 137) to approve.")
+        return
+      }
+    }
+
+    // Set state to APPROVED -> EXECUTING
+    setApprovalState("EXECUTING")
+    setApprovalErrorMessage(null)
+
+    try {
+      let hash = ""
+      const recipient = targetRecipient
+
+      if (activeToken.isNative) {
+        // Native POL transaction
+        const valueInWei = parseUnits(activeTokenCalc.tokenAmount, activeToken.decimals)
+        hash = await sendTransactionAsync({
+          to: recipient,
+          value: valueInWei,
+          gas: 60000n,
+        })
+      } else {
+        // ERC-20 token transfer (USDC, VERSE)
+        const amountUnits = parseUnits(activeTokenCalc.tokenAmount, activeToken.decimals)
+        hash = await writeContractAsync({
+          address: activeToken.address,
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [recipient, amountUnits],
+          gas: 120000n,
+        })
+      }
+
+      if (!hash) {
+        throw new Error("No transaction hash returned from wallet.")
+      }
+
+      setExecutionTxHash(hash)
+      setApprovalState("CONFIRMING")
+
+      // 1. Synchronize invoice status to paid in backend database immediately
+      try {
+        await fetch("/api/invoices/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...invoice,
+            status: "paid",
+            paidAt: new Date().toISOString(),
+            paymentId: hash,
+            payments: [
+              {
+                id: `pay_${Date.now()}`,
+                invoiceId: invoice.id,
+                txHash: hash,
+                amount: activeTokenCalc.tokenAmount,
+                token: activeToken,
+                chainId: POLYGON_MAINNET_CHAIN_ID,
+                payerAddress: toChecksumAddress(address),
+                recipientAddress: recipient,
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          }),
+        })
+      } catch (err) {
+        console.warn("Database sync notice:", err)
+      }
+
+      // 2. Record payment event
+      try {
+        await fetch(`/api/invoices/${encodeURIComponent(invoice.id)}/payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            txHash: hash,
+            token: activeToken,
+            chainId: POLYGON_MAINNET_CHAIN_ID,
+            payerAddress: toChecksumAddress(address),
+            recipientAddress: recipient,
+          }),
+        })
+      } catch (err) {
+        console.warn("Payment event notice:", err)
+      }
+
+      // Update local invoice state
+      setInvoice((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "paid",
+              paidAt: new Date().toISOString(),
+              paymentId: hash,
+              payments: [
+                {
+                  id: `pay_${Date.now()}`,
+                  invoiceId: prev.id,
+                  txHash: hash,
+                  amount: activeTokenCalc.tokenAmount,
+                  token: activeToken,
+                  chainId: POLYGON_MAINNET_CHAIN_ID,
+                  payerAddress: toChecksumAddress(address),
+                  recipientAddress: recipient,
+                  createdAt: new Date().toISOString(),
+                },
+              ],
+            }
+          : null
+      )
+
+      setApprovalState("COMPLETED")
+    } catch (err: any) {
+      console.error("Payment approval execution error:", err)
+      const msg = err?.message || ""
+      if (msg.includes("rejected") || msg.includes("denied") || msg.includes("User rejected")) {
+        setApprovalErrorMessage("Transaction authorization was cancelled in your wallet. No funds were transferred.")
+      } else {
+        setApprovalErrorMessage(msg || "Payment authorization failed. Please check your token balance and network fees.")
+      }
+      setApprovalState("FAILED")
+    }
+  }
+
+  const handleReject = () => {
+    setApprovalState("REJECTED")
+    setApprovalErrorMessage(null)
+  }
+
+  const handleResetApproval = () => {
+    setApprovalState("PENDING_APPROVAL")
+    setApprovalErrorMessage(null)
   }
 
   if (isLoading) {
@@ -274,7 +479,7 @@ export default function PublicPayPage() {
             <Loader2 className="w-6 h-6 animate-spin" />
           </div>
           <div className="space-y-1">
-            <h3 className="font-bold text-slate-900 text-base">Loading Invoice Details</h3>
+            <h3 className="font-bold text-slate-900 text-base">Loading Payment Request</h3>
             <p className="text-xs text-slate-500">Connecting to Polygon settlement node...</p>
           </div>
         </div>
@@ -292,9 +497,9 @@ export default function PublicPayPage() {
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-lg font-bold text-slate-900">Invoice Not Found</h2>
+            <h2 className="text-lg font-bold text-slate-900">Payment Request Not Found</h2>
             <p className="text-xs text-slate-500">
-              The requested invoice <strong className="font-mono text-slate-700">{id}</strong> could not be located on the network. Please verify the link with the merchant.
+              The requested payment request <strong className="font-mono text-slate-700">{id}</strong> could not be located on the network.
             </p>
           </div>
 
@@ -312,56 +517,8 @@ export default function PublicPayPage() {
     )
   }
 
-  const isPaid = invoice.status === "paid"
-  const isSubmitted = invoice.status === "payment_submitted"
+  const isPaid = invoice.status === "paid" || approvalState === "COMPLETED"
   const isCancelled = invoice.status === "cancelled"
-  const isDraft = invoice.status === "draft"
-  const merchantDisplayName =
-    invoice.merchantBusinessName ||
-    invoice.businessName ||
-    invoice.merchantName ||
-    "Verse Verified Merchant"
-
-  const numericTotal = parseFloat(invoice.total || "0")
-  const polCalc = calculateAmount(numericTotal, invoice.currency || "USD", "POL")
-  const verseCalc = calculateAmount(numericTotal, invoice.currency || "USD", "VERSE")
-  const usdcCalc = calculateAmount(numericTotal, invoice.currency || "USD", "USDC")
-
-  const availableTokens = SUPPORTED_PAYMENT_TOKENS[POLYGON_MAINNET_CHAIN_ID] || []
-  const activeQrToken =
-    availableTokens.find((t) => t.symbol.toUpperCase() === selectedTokenSymbol.toUpperCase()) ||
-    availableTokens[0]
-
-  const activeTokenCalc = calculateAmount(
-    numericTotal,
-    invoice.currency || "USD",
-    activeQrToken.symbol
-  )
-
-  const rawRecipient =
-    invoice.paymentAddress ||
-    (invoice as any).merchantWalletAddress ||
-    (invoice.merchantId?.startsWith("0x") ? invoice.merchantId : "") ||
-    ""
-  const targetRecipient = toChecksumAddress(rawRecipient)
-
-  const tokenBaseUnits = safeParseBaseUnits(
-    activeTokenCalc.tokenAmount,
-    activeQrToken.decimals
-  )
-
-  // Construct standard EIP-681 Web3 Payment URI for mobile wallets
-  let eip681Uri = ""
-  if (targetRecipient) {
-    if (activeQrToken.isNative) {
-      eip681Uri = `ethereum:${targetRecipient}@137?value=${tokenBaseUnits}`
-    } else {
-      const tokenContract = toChecksumAddress(activeQrToken.address)
-      eip681Uri = `ethereum:${tokenContract}@137/transfer?address=${targetRecipient}&uint256=${tokenBaseUnits}`
-    }
-  }
-
-  const publicCheckoutUrl = generatePayUrl(invoice)
 
   return (
     <div className="min-h-screen bg-slate-50/90 text-slate-900 flex flex-col font-sans selection:bg-purple-100">
@@ -369,7 +526,7 @@ export default function PublicPayPage() {
       <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs print:hidden">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <VerseLogo size="md" subtitle="Settlement Portal" priority />
+            <VerseLogo size="md" subtitle="Smart Approval Checkout" priority />
           </div>
 
           <div className="flex items-center gap-2">
@@ -399,7 +556,7 @@ export default function PublicPayPage() {
                 className="px-3.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
               >
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-                <span>Connecting... (Cancel)</span>
+                <span>Connecting...</span>
               </button>
             ) : (
               <button
@@ -423,24 +580,44 @@ export default function PublicPayPage() {
           <div className="p-6 md:p-8 bg-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/60">
-                  Polygon PoS Invoice
+                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300 bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/60 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-purple-400" />
+                  Verified Direct Approval
                 </span>
                 <span
                   className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                     isPaid
                       ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                      : isCancelled
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                      : approvalState === "REJECTED"
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
                       : "bg-amber-500/20 text-amber-300 border border-amber-500/40"
                   }`}
                 >
-                  {isPaid ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                  {isPaid ? "Paid & Settled" : "Pending Payment"}
+                  {isPaid ? (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  ) : isCancelled || approvalState === "REJECTED" ? (
+                    <XCircle className="w-3.5 h-3.5" />
+                  ) : (
+                    <Clock className="w-3.5 h-3.5" />
+                  )}
+                  {isPaid
+                    ? "Completed & Settled"
+                    : isCancelled
+                    ? "Cancelled"
+                    : approvalState === "REJECTED"
+                    ? "Approval Rejected"
+                    : "Pending Approval"}
                 </span>
               </div>
               <h1 className="text-2xl md:text-3xl font-bold font-mono tracking-tight">
                 {invoice.invoiceNumber}
               </h1>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                <span>
+                  Merchant: <strong className="text-slate-200">{merchantDisplayName}</strong>
+                </span>
                 <span>
                   Billed to: <strong className="text-slate-200">{invoice.customerName}</strong>
                 </span>
@@ -452,84 +629,48 @@ export default function PublicPayPage() {
               </div>
             </div>
 
-            <div className="text-left md:text-right bg-slate-800/60 p-4 rounded-xl border border-slate-700/60 md:bg-transparent md:p-0 md:border-0">
-              <div className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Due</div>
-              <div className="text-3xl md:text-4xl font-extrabold font-mono text-purple-300">
-                ${invoice.total} <span className="text-base text-slate-400 font-sans font-normal">{invoice.currency}</span>
+            {/* Total Display */}
+            <div className="md:text-right space-y-1 bg-slate-800/60 p-4 rounded-xl border border-slate-700/60">
+              <div className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Approved Amount Due
               </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">Instant settlement with zero chargebacks</div>
-            </div>
-          </div>
-
-          {/* Verified Status Checks */}
-          <div className="bg-slate-900/95 text-white px-6 py-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 font-bold text-emerald-400">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Verified Merchant Payment Request</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-300 text-[11px]">
-              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Invoice verified</span>
-              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Merchant verified</span>
-              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Amount verified</span>
-              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Network verified (Polygon 137)</span>
-              <span className="flex items-center gap-1"><Check className="w-3 h-3 text-emerald-400" /> Recipient verified</span>
-            </div>
-          </div>
-
-          {/* Receiving Merchant Info Pill */}
-          <div className="px-6 py-3 bg-purple-50/60 border-b border-purple-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-slate-700 font-medium">
-              <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0" />
-              <span className="font-semibold text-slate-900">{merchantDisplayName}</span>
-              <span className="text-slate-400">•</span>
-              <span>Settlement Wallet:</span>
-              {targetRecipient ? (
-                <span className="font-mono font-bold text-purple-950 bg-white px-2 py-0.5 rounded border border-purple-200">
-                  {targetRecipient.slice(0, 8)}...{targetRecipient.slice(-6)}
+              <div className="text-3xl font-bold font-mono text-white tracking-tight">
+                ${invoice.total}{" "}
+                <span className="text-sm font-sans font-normal text-slate-400">
+                  {invoice.currency || "USD"}
                 </span>
-              ) : (
-                <span className="font-semibold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded border border-amber-200 text-[11px]">
-                  Address Not Set by Creator
-                </span>
-              )}
+              </div>
+              <div className="text-xs text-purple-300 font-mono flex items-center md:justify-end gap-1">
+                <span>≈ {activeTokenCalc.tokenAmount} {activeToken.symbol}</span>
+                <span>(Polygon PoS)</span>
+              </div>
             </div>
-            {targetRecipient && (
-              <button
-                onClick={() => copyToClipboard(targetRecipient, "merchant_wallet")}
-                className="inline-flex items-center gap-1 text-purple-700 hover:text-purple-900 font-semibold text-xs transition-colors cursor-pointer"
-              >
-                {copiedField === "merchant_wallet" ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
-                <span>{copiedField === "merchant_wallet" ? "Address Copied" : "Copy Wallet"}</span>
-              </button>
-            )}
           </div>
 
-          {/* Status Banners or Payment Methods */}
+          {/* Direct Approval Flow States */}
           {isCancelled ? (
+            /* Cancelled State */
             <div className="p-6 md:p-8 space-y-4 text-center bg-rose-50/40 border-b border-rose-100">
               <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
                 <AlertCircle className="w-8 h-8" />
               </div>
               <div className="space-y-1.5 max-w-md mx-auto">
-                <h3 className="text-xl font-bold text-slate-900">Invoice Cancelled</h3>
+                <h3 className="text-xl font-bold text-slate-900">Payment Request Cancelled</h3>
                 <p className="text-sm text-slate-600">
-                  This payment request has been cancelled by the merchant. Payments cannot be submitted for cancelled invoices.
+                  This payment request was cancelled by the merchant and can no longer receive approvals or payments.
                 </p>
               </div>
             </div>
           ) : isPaid ? (
+            /* One-time Payment Protection: Already Completed */
             <div className="p-6 md:p-8 space-y-6 text-center bg-emerald-50/30">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs animate-in zoom-in-95 duration-200">
                 <CheckCircle2 className="w-9 h-9" />
               </div>
               <div className="space-y-1.5 max-w-md mx-auto">
-                <h3 className="text-2xl font-bold text-slate-900">Payment Successfully Confirmed!</h3>
+                <h3 className="text-2xl font-bold text-slate-900">Payment Request Already Completed</h3>
                 <p className="text-sm text-slate-600">
-                  This invoice has been settled on the Polygon PoS network. A cryptographic receipt has been generated.
+                  This payment request has been processed and settled on the Polygon PoS network. Further payments are disabled to protect against double-spending.
                 </p>
               </div>
 
@@ -583,306 +724,216 @@ export default function PublicPayPage() {
                 </button>
               </div>
             </div>
-          ) : isSubmitted ? (
-            <div className="p-6 md:p-8 space-y-6 text-center bg-amber-50/50">
-              <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto shadow-xs">
-                <Clock className="w-9 h-9 animate-spin" />
+          ) : approvalState === "REJECTED" ? (
+            /* Rejected State */
+            <div className="p-6 md:p-8 space-y-5 text-center bg-slate-50/50">
+              <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                <XCircle className="w-8 h-8" />
               </div>
-              <div className="space-y-2 max-w-md mx-auto">
-                <h3 className="text-2xl font-bold text-slate-900">Payment Submitted!</h3>
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  Aapki payment claim notification merchant ko bhej di gayi hai. Merchant ab apne dashboard se verification karke status <strong className="text-emerald-700">Paid</strong> mark kar dein gey.
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h3 className="text-xl font-bold text-slate-900">Payment Approval Rejected</h3>
+                <p className="text-sm text-slate-600">
+                  You declined this payment request. No funds were transferred or deducted from your wallet.
                 </p>
               </div>
-              <div className="pt-2 flex flex-wrap items-center justify-center gap-3 print:hidden">
+              <div className="pt-2 flex justify-center">
                 <button
-                  onClick={handlePrint}
-                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+                  type="button"
+                  onClick={handleResetApproval}
+                  className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  Print Invoice Copy
+                  Review Request Again
                 </button>
               </div>
             </div>
           ) : (
+            /* Primary Direct Payment Approval Screen */
             <div className="p-6 md:p-8 space-y-6">
-              {/* Payment Option Selector (2 Clear Choices) */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                    Select Payment Method
+              {/* Approval Box */}
+              <div className="p-5 bg-purple-50/60 rounded-2xl border border-purple-200/80 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-purple-100">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-purple-700" />
+                    <span className="font-bold text-sm text-purple-950">Payment Approval</span>
+                  </div>
+                  <span className="text-[11px] font-mono font-semibold text-purple-700 bg-purple-100/80 px-2.5 py-0.5 rounded-full">
+                    Polygon Mainnet (137)
                   </span>
-                  <span className="text-xs text-slate-500 font-medium">Polygon PoS (Instant & Low Gas)</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Option 1: Browser Web3 Wallet */}
+                {/* Clear Authorization Parameters */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 bg-white rounded-xl border border-purple-100 space-y-1">
+                    <span className="text-slate-500 font-medium">Merchant:</span>
+                    <div className="font-bold text-slate-900 text-sm">{merchantDisplayName}</div>
+                    <div className="font-mono text-[11px] text-slate-500 break-all">{targetRecipient}</div>
+                  </div>
+
+                  <div className="p-3 bg-white rounded-xl border border-purple-100 space-y-1">
+                    <span className="text-slate-500 font-medium">Amount:</span>
+                    <div className="font-bold text-purple-700 text-base font-mono">
+                      {activeTokenCalc.tokenAmount} {activeToken.symbol}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-mono">
+                      Fiat Value: ${invoice.total} {invoice.currency || "USD"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Token Switcher */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-800">Select Currency:</span>
+                    <div className="flex items-center gap-2 text-purple-700 font-medium">
+                      <span>Rate locked ({secondsRemaining}s)</span>
+                      <button
+                        type="button"
+                        onClick={() => refreshPrices()}
+                        className="hover:underline flex items-center gap-1 cursor-pointer"
+                        title="Refresh market rates"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${pricesLoading ? "animate-spin" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {availableTokens.map((t) => {
+                      const isSelected = t.symbol.toUpperCase() === selectedTokenSymbol.toUpperCase()
+                      const calc = calculateAmount(numericTotal, invoice.currency || "USD", t.symbol)
+                      return (
+                        <button
+                          key={t.symbol}
+                          type="button"
+                          onClick={() => setSelectedTokenSymbol(t.symbol)}
+                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-white border-purple-600 shadow-xs ring-2 ring-purple-600/20"
+                              : "bg-white/60 border-purple-100 hover:bg-white text-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-bold text-xs text-slate-900">{t.symbol}</span>
+                            {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span>}
+                          </div>
+                          <div className="font-mono text-xs text-purple-700 font-semibold truncate">
+                            {calc.tokenAmount}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Clear Consequence Notice */}
+                <div className="p-3 bg-white/80 rounded-xl border border-purple-100 text-xs text-slate-700 space-y-1">
+                  <div className="font-semibold text-slate-900">
+                    You are approving this payment to <span className="text-purple-700">{merchantDisplayName}</span>.
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Scanning the QR only opens this review. When you click <strong>Approve &amp; Pay</strong> and complete the required wallet authorization/signature, the amount will be automatically sent from your wallet directly to the merchant on Polygon.
+                  </p>
+                </div>
+
+                {/* Error Banner if any */}
+                {approvalErrorMessage && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>{approvalErrorMessage}</span>
+                  </div>
+                )}
+
+                {/* Connected Wallet State */}
+                <div className="p-3 bg-white rounded-xl border border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-slate-500 font-medium">Payer Wallet:</span>
+                    <div className="font-mono font-semibold text-slate-900">
+                      {isWalletConnected ? (
+                        <span className="flex items-center gap-1.5 text-emerald-700">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          <span>{formatWalletAddress(address || "")}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Not connected</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {isWalletConnected && isWrongChain && (
+                    <button
+                      type="button"
+                      onClick={() => switchChain && switchChain({ chainId: POLYGON_MAINNET_CHAIN_ID })}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>Switch to Polygon Mainnet</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Primary Action Buttons: Reject vs Approve & Pay */}
+                <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setActiveTab("wallet")}
-                    className={`p-4 rounded-2xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
-                      activeTab === "wallet"
-                        ? "border-purple-600 bg-purple-50/50 shadow-xs ring-2 ring-purple-600/20"
-                        : "border-slate-200 bg-white hover:bg-slate-50"
-                    }`}
+                    onClick={handleReject}
+                    disabled={approvalState === "EXECUTING" || approvalState === "CONFIRMING"}
+                    className="w-full sm:w-auto px-6 py-3.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        activeTab === "wallet" ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      <CreditCard className="w-5 h-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                        <span>Option 1: Connect Wallet & Pay</span>
-                        {activeTab === "wallet" && <span className="w-2 h-2 rounded-full bg-purple-600"></span>}
-                      </div>
-                      <p className="text-xs text-slate-500 leading-normal">
-                        Pay with MetaMask, Coinbase, Rainbow, or WalletConnect in 1 click.
-                      </p>
-                    </div>
+                    Reject
                   </button>
 
-                  {/* Option 2: QR Code Mobile Scanning */}
                   <button
                     type="button"
-                    onClick={() => setActiveTab("qr")}
-                    className={`p-4 rounded-2xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
-                      activeTab === "qr"
-                        ? "border-purple-600 bg-purple-50/50 shadow-xs ring-2 ring-purple-600/20"
-                        : "border-slate-200 bg-white hover:bg-slate-50"
-                    }`}
+                    onClick={handleApproveAndPay}
+                    disabled={approvalState === "EXECUTING" || approvalState === "CONFIRMING"}
+                    className="w-full sm:w-auto flex-1 px-6 py-3.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                   >
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        activeTab === "qr" ? "bg-purple-600 text-white" : "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      <QrCode className="w-5 h-5" />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
-                        <span>Option 2: Scan QR with Phone</span>
-                        {activeTab === "qr" && <span className="w-2 h-2 rounded-full bg-purple-600"></span>}
-                      </div>
-                      <p className="text-xs text-slate-500 leading-normal">
-                        Scan with any mobile crypto wallet camera to auto-fill payment.
-                      </p>
-                    </div>
+                    {approvalState === "EXECUTING" ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Waiting for Wallet Authorization...</span>
+                      </>
+                    ) : approvalState === "CONFIRMING" ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Confirming on Polygon Block...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="w-4 h-4" />
+                        <span>Approve &amp; Pay</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
 
-              {/* Tab 1: Wallet Connection & Direct Execution */}
-              {activeTab === "wallet" && (
-                <div className="p-6 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">Supported Polygon Currencies</h3>
-                      <p className="text-xs text-slate-500">Live exchange rates with 30s price guarantee</p>
-                    </div>
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-mono text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        Rate locked ({secondsRemaining}s)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => refreshPrices()}
-                        className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1.5 font-medium cursor-pointer"
-                        title="Click to refresh market rates"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${pricesLoading ? "animate-spin" : ""}`} />
-                        <span>Refresh</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Token Rate Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-1">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span className="font-semibold text-slate-700">USDC Stablecoin</span>
-                        <span className="font-mono text-[11px]">$1.00 USD</span>
-                      </div>
-                      <div className="text-lg font-bold font-mono text-slate-900">
-                        {usdcCalc.tokenAmount}{" "}
-                        <span className="text-xs font-sans text-slate-500 font-normal">USDC</span>
-                      </div>
-                    </div>
-
-                    <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-1">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span className="font-semibold text-slate-700">POL (Native)</span>
-                        <span className="font-mono text-[11px]">
-                          {polCalc.isCalculating || polCalc.rate <= 0 ? (
-                            <span className="animate-pulse text-purple-600 font-sans">Live rate...</span>
-                          ) : (
-                            polCalc.formattedRate
-                          )}
-                        </span>
-                      </div>
-                      <div className="text-lg font-bold font-mono text-slate-900">
-                        {polCalc.isCalculating || polCalc.rate <= 0 ? (
-                          <span className="text-xs font-normal text-purple-600 animate-pulse flex items-center gap-1 py-1">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Fetching live rate...
-                          </span>
-                        ) : (
-                          <>
-                            {polCalc.tokenAmount}{" "}
-                            <span className="text-xs font-sans text-slate-500 font-normal">POL</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="p-3.5 bg-white rounded-xl border border-slate-200 space-y-1">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span className="font-semibold text-slate-700">VERSE Token</span>
-                        <span className="font-mono text-[11px]">
-                          {verseCalc.isCalculating || verseCalc.rate <= 0 ? (
-                            <span className="animate-pulse text-purple-600 font-sans">Live rate...</span>
-                          ) : (
-                            verseCalc.formattedRate
-                          )}
-                        </span>
-                      </div>
-                      <div className="text-lg font-bold font-mono text-slate-900">
-                        {verseCalc.isCalculating || verseCalc.rate <= 0 ? (
-                          <span className="text-xs font-normal text-purple-600 animate-pulse flex items-center gap-1 py-1">
-                            <Loader2 className="w-3 h-3 animate-spin" /> Fetching live rate...
-                          </span>
-                        ) : (
-                          <>
-                            {verseCalc.tokenAmount}{" "}
-                            <span className="text-xs font-sans text-slate-500 font-normal">VERSE</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Action CTA */}
-                  <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
-                    {isWalletConnected ? (
-                      <button
-                        onClick={() => setIsPayOpen(true)}
-                        className="w-full sm:w-auto flex-1 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                      >
-                        <CreditCard className="w-4 h-4" />
-                        <span>Confirm & Pay ${invoice.total} {invoice.currency}</span>
-                      </button>
-                    ) : isWalletConnecting ? (
-                      <button
-                        type="button"
-                        onClick={() => disconnect()}
-                        className="w-full sm:w-auto flex-1 px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                      >
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Connecting to Wallet... (Click to Cancel)</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => open()}
-                        className="w-full sm:w-auto flex-1 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
-                      >
-                        <Wallet className="w-4 h-4" />
-                        <span>Connect Web3 Wallet to Pay</span>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => setIsQrModalOpen(true)}
-                      className="w-full sm:w-auto px-5 py-3 bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                    >
-                      <QrCode className="w-4 h-4 text-purple-600" />
-                      <span>Open Fullscreen QR</span>
-                    </button>
-                  </div>
-
-                  {/* Mobile Direct In-App Browser Options */}
-                  <div className="pt-2 border-t border-slate-200/80 space-y-2">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span className="font-semibold text-slate-700">Mobile Wallet 1-Tap Checkout:</span>
-                      <span>Polygon PoS</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={handleOpenMetaMask}
-                        className="py-2.5 px-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Open in MetaMask Browser</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleOpenTrustWallet}
-                        className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-slate-600" />
-                        <span>Open in Trust Wallet</span>
-                      </button>
-                    </div>
-                  </div>
+              {/* In-app Mobile Browser Launchers */}
+              <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-semibold text-slate-700">Mobile Wallet 1-Tap Launchers:</span>
+                  <span>Polygon PoS</span>
                 </div>
-              )}
-
-              {/* Tab 2: Mobile Smart QR Code Scanning */}
-              {activeTab === "qr" && (
-                <div className="p-4 sm:p-6 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900">Server-Authoritative Smart QR</h3>
-                      <p className="text-xs text-slate-500">
-                        Point your mobile camera or Web3 wallet scanner to resolve and pay this verified request.
-                      </p>
-                    </div>
-                    <span className="text-[11px] font-mono text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100 flex items-center gap-1.5 w-fit">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      Verified Polygon Smart QR
-                    </span>
-                  </div>
-
-                  <div className="flex justify-center">
-                    <SmartQRCard
-                      invoice={invoice}
-                      targetRecipient={targetRecipient}
-                      merchantName={merchantDisplayName}
-                      initialTokenSymbol={selectedTokenSymbol}
-                      showControls={true}
-                      showTokenSwitcher={true}
-                    />
-                  </div>
-
-                  {/* Mobile Direct In-App Browser Options */}
-                  <div className="max-w-md mx-auto pt-2 border-t border-slate-200/80 space-y-2">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span className="font-semibold text-slate-700">Mobile Wallet 1-Tap Checkout:</span>
-                      <span>Polygon PoS</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={handleOpenMetaMask}
-                        className="py-2.5 px-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Open in MetaMask</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleOpenTrustWallet}
-                        className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      >
-                        <Smartphone className="w-3.5 h-3.5 text-slate-600" />
-                        <span>Open in Trust Wallet</span>
-                      </button>
-                    </div>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenMetaMask}
+                    className="py-2.5 px-3 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-900 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Open in MetaMask</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenTrustWallet}
+                    className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-800 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Open in Trust Wallet</span>
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -937,7 +988,7 @@ export default function PublicPayPage() {
         <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500 px-2 py-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-purple-600" />
-            <span>Decentralized non-custodial settlement powered by Polygon PoS & Verse</span>
+            <span>Decentralized direct approval payment powered by Polygon PoS &amp; Verse</span>
           </div>
           <div className="flex items-center gap-3 font-mono">
             <span>Chain ID: 137</span>
@@ -954,26 +1005,7 @@ export default function PublicPayPage() {
         </div>
       </main>
 
-      {/* Payment Modals */}
-      {isPayOpen && (
-        <InvoicePaymentModal
-          invoice={invoice}
-          isOpen={isPayOpen}
-          onClose={() => {
-            setIsPayOpen(false)
-            fetchInvoice(true)
-          }}
-          onSuccess={(paidData) => {
-            if (paidData) setInvoice(paidData)
-            fetchInvoice(true)
-          }}
-          onPaid={(paidData) => {
-            if (paidData) setInvoice(paidData)
-            fetchInvoice(true)
-          }}
-        />
-      )}
-
+      {/* QR Modal when requested */}
       {isQrModalOpen && (
         <PaymentQrModal
           invoice={invoice}
