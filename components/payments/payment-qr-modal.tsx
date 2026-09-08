@@ -4,8 +4,11 @@ import * as React from "react"
 import { Invoice } from "@/lib/invoices/types"
 import {
   toChecksumAddress,
+  SUPPORTED_PAYMENT_TOKENS,
+  POLYGON_MAINNET_CHAIN_ID,
 } from "@/lib/payments/config"
 import { SmartQRCard } from "./smart-qr-card"
+import { useCryptoPrices } from "@/lib/payments/use-crypto-prices"
 import {
   X,
   QrCode,
@@ -28,9 +31,10 @@ interface PaymentQrModalProps {
 }
 
 export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = false }: PaymentQrModalProps) {
+  const [selectedSymbol, setSelectedSymbol] = React.useState<string>("USDC")
   const [copied, setCopied] = React.useState<boolean>(false)
-  const [isDetectedPaid, setIsDetectedPaid] = React.useState<boolean>(invoice.status === "paid")
-  const [isClaimSubmitted, setIsClaimSubmitted] = React.useState<boolean>(invoice.status === "payment_submitted")
+  const [isDetectedPaid, setIsDetectedPaid] = React.useState<boolean>(Boolean(invoice?.status === "paid"))
+  const [isClaimSubmitted, setIsClaimSubmitted] = React.useState<boolean>(Boolean(invoice?.status === "payment_submitted"))
   const [isClaimingPaid, setIsClaimingPaid] = React.useState<boolean>(false)
   const [manualTxHash, setManualTxHash] = React.useState<string>("")
   const [isVerifyingTx, setIsVerifyingTx] = React.useState<boolean>(false)
@@ -41,9 +45,11 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
   const { calculateAmount } = useCryptoPrices()
 
   React.useEffect(() => {
-    setIsDetectedPaid(invoice.status === "paid")
-    setIsClaimSubmitted(invoice.status === "payment_submitted")
-  }, [invoice.status])
+    if (invoice) {
+      setIsDetectedPaid(invoice.status === "paid")
+      setIsClaimSubmitted(invoice.status === "payment_submitted")
+    }
+  }, [invoice?.status])
 
   React.useEffect(() => {
     if (!isOpen) return
@@ -178,33 +184,61 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
       color: "blue",
     }
 
-  const invoiceAmountNum = parseFloat(invoice.total || "0")
-  const tokenCalc = calculateAmount(invoiceAmountNum, invoice.currency || "USD", activeToken.symbol)
+  const invoiceAmountNum = parseFloat(invoice?.total || "0")
+  const tokenCalc = calculateAmount(invoiceAmountNum, invoice?.currency || "USD", activeToken.symbol)
   const rawRecipient =
-    invoice.paymentAddress ||
-    (invoice as any).merchantWalletAddress ||
-    (invoice.merchantId?.startsWith("0x") ? invoice.merchantId : "") ||
+    invoice?.paymentAddress ||
+    (invoice as any)?.merchantWalletAddress ||
+    (invoice?.merchantId && typeof invoice.merchantId === "string" && invoice.merchantId.startsWith("0x") ? invoice.merchantId : "") ||
     ""
   const recipient = toChecksumAddress(rawRecipient)
 
-  // Construct standard EIP-681 payment URI with raw integer base units for wallets
+  const targetId = invoice?.id || invoice?.invoiceNumber || "INV-0001"
+  const checkoutUrl =
+    typeof window !== "undefined" && window.location.origin
+      ? `${window.location.origin}/pay/${encodeURIComponent(targetId)}`
+      : `/pay/${encodeURIComponent(targetId)}`
+
+  const eip681Uri = React.useMemo(() => {
+    if (!recipient) return checkoutUrl
+    try {
+      const decimals = activeToken.decimals || 18
+      const amountStr = (tokenCalc.amount || "0").replace(/,/g, "").trim()
+      const num = parseFloat(amountStr)
+      if (isNaN(num) || num <= 0) return checkoutUrl
+      const [whole = "0", frac = ""] = amountStr.split(".")
+      const paddedFrac = frac.slice(0, decimals).padEnd(decimals, "0")
+      const wholeBig = BigInt(whole) * BigInt(10 ** decimals)
+      const fracBig = BigInt(paddedFrac)
+      const baseUnits = (wholeBig + fracBig).toString()
+
+      if (activeToken.address.toLowerCase() === "0x0000000000000000000000000000000000001010") {
+        return `ethereum:${recipient}@137?value=${baseUnits}`
+      }
+      return `ethereum:${activeToken.address}@137/transfer?address=${recipient}&uint256=${baseUnits}`
+    } catch {
+      return checkoutUrl
+    }
+  }, [recipient, activeToken, tokenCalc.amount, checkoutUrl])
+
   const handleCopyAddress = () => {
-    navigator.clipboard.writeText(recipient)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (recipient) {
+      navigator.clipboard.writeText(recipient)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   const handleOpenMetaMaskBrowser = () => {
     if (typeof window !== "undefined") {
-      const rawUrl = window.location.href
-      const cleanUrl = rawUrl.replace(/^https?:\/\//, "")
+      const cleanUrl = checkoutUrl.replace(/^https?:\/\//, "")
       window.location.href = `https://metamask.app.link/dapp/${cleanUrl}`
     }
   }
 
   const handleOpenTrustWallet = () => {
     if (typeof window !== "undefined") {
-      const fullUrl = encodeURIComponent(window.location.href)
+      const fullUrl = encodeURIComponent(checkoutUrl)
       window.location.href = `https://link.trustwallet.com/open_url?coin_id=60&url=${fullUrl}`
     }
   }
@@ -215,7 +249,7 @@ export function PaymentQrModal({ invoice, isOpen, onClose, onPaid, isCreator = f
     }
   }
 
-  if (!isOpen) return null
+  if (!isOpen || !invoice) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
